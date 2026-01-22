@@ -60,3 +60,44 @@ class ConfigurationError(PyModulesError):
     """Raised when configuration is invalid."""
 
     pass
+
+
+# Database layer exceptions
+
+
+class DatabaseError(PyModulesError):
+    """Base exception for database-related errors."""
+
+    pass
+
+
+class ConnectionError(DatabaseError):
+    """Raised when database connection fails."""
+
+    pass
+
+
+class RepositoryError(DatabaseError):
+    """Raised when repository operations fail."""
+
+    def __init__(
+        self,
+        message: str,
+        model_name: str | None = None,
+        operation: str | None = None,
+        original_error: Exception | None = None,
+    ):
+        super().__init__(message)
+        self.model_name = model_name
+        self.operation = operation
+        self.original_error = original_error
+
+    def __str__(self) -> str:
+        parts = [super().__str__()]
+        if self.model_name:
+            parts.append(f"Model: {self.model_name}")
+        if self.operation:
+            parts.append(f"Operation: {self.operation}")
+        if self.original_error:
+            parts.append(f"Cause: {type(self.original_error).__name__}: {self.original_error}")
+        return " | ".join(parts)

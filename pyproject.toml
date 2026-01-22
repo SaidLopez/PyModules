@@ -23,8 +23,20 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-# Web framework integration
+# Web framework integration (legacy)
 fastapi = ["fastapi>=0.100.0", "uvicorn[standard]>=0.23.0"]
+
+# Database layer
+sqlalchemy = ["sqlalchemy[asyncio]>=2.0.0", "pydantic-settings>=2.0.0"]
+postgres = ["pymodules[sqlalchemy]", "asyncpg>=0.28.0"]
+sqlite = ["pymodules[sqlalchemy]", "aiosqlite>=0.19.0"]
+
+# API layer (new)
+api = ["pymodules[fastapi]", "pydantic-settings>=2.0.0"]
+api-db = ["pymodules[api,sqlalchemy]"]
+
+# Auth providers
+jwt = ["python-jose[cryptography]>=3.3.0"]
 
 # Message broker - Redis Streams
 redis = ["redis>=5.0.0"]
@@ -38,6 +50,7 @@ dns = []
 # Convenience groups
 messaging = ["pymodules[redis]"]
 discovery = ["pymodules[consul]"]
+web = ["pymodules[api-db,jwt]"]
 
 # Development dependencies
 dev = [
@@ -49,10 +62,14 @@ dev = [
     "mypy>=1.0.0",
     "ruff>=0.1.0",
     "pre-commit>=3.0.0",
+    # NEW for db tests
+    "aiosqlite>=0.19.0",
+    # NEW for api tests
+    "pytest-mock>=3.12.0",
 ]
 
 # Full installation with all optional features
-full = ["pymodules[fastapi,redis,consul,dev]"]
+full = ["pymodules[web,redis,consul,dev]"]
 
 # Backward compatibility
 all = ["pymodules[full]"]
@@ -115,7 +132,7 @@ namespace_packages = true
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = ["fastapi.*", "uvicorn.*", "pydantic.*", "redis.*", "consul.*"]
+module = ["fastapi.*", "uvicorn.*", "pydantic.*", "pydantic_settings.*", "redis.*", "consul.*", "sqlalchemy.*", "jose.*", "starlette.*", "aiosqlite.*", "asyncpg.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

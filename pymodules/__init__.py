@@ -7,15 +7,20 @@ events and modules, inspired by NetModules.
 Subpackages:
     pymodules.messaging - Distributed message broker integration
     pymodules.discovery - Service discovery for microservices
-    pymodules.fastapi - FastAPI integration
+    pymodules.fastapi - FastAPI integration (legacy)
+    pymodules.api - REST API generation layer
+    pymodules.db - Database abstraction layer
 """
 
 from .config import Metrics, ModuleHostConfig
 from .exceptions import (
     ConfigurationError,
+    ConnectionError,
+    DatabaseError,
     EventHandlingError,
     ModuleRegistrationError,
     PyModulesError,
+    RepositoryError,
 )
 from .health import (
     HealthCheck,
@@ -73,6 +78,9 @@ __all__ = [
     "EventHandlingError",
     "ModuleRegistrationError",
     "ConfigurationError",
+    "DatabaseError",
+    "ConnectionError",
+    "RepositoryError",
     "RateLimitExceeded",
     "CircuitBreakerOpen",
     # Logging
@@ -106,9 +114,11 @@ __all__ = [
     "create_http_check",
     "create_tcp_check",
     "create_callable_check",
-    # Subpackages (access via pymodules.messaging, pymodules.discovery)
+    # Subpackages (access via pymodules.messaging, pymodules.discovery, etc.)
     "messaging",
     "discovery",
+    "api",
+    "db",
 ]
 
 __version__ = "0.3.0"
@@ -123,4 +133,10 @@ def __getattr__(name: str) -> object:
     if name == "discovery":
         from . import discovery
         return discovery
+    if name == "api":
+        from . import api
+        return api
+    if name == "db":
+        from . import db
+        return db
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -6,7 +6,7 @@ Build scalable, production-ready applications where components communicate throu
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-147%20passed-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-326%20passed-brightgreen.svg)](#testing)
 
 ## Features
 
@@ -55,14 +55,25 @@ Build scalable, production-ready applications where components communicate throu
 # Basic installation
 pip install pymodules
 
-# With FastAPI integration
+# With FastAPI integration (legacy)
 pip install pymodules[fastapi]
+
+# Database layer (SQLAlchemy async)
+pip install pymodules[sqlite]      # SQLite with aiosqlite
+pip install pymodules[postgres]    # PostgreSQL with asyncpg
+
+# API layer (auto-discovery router)
+pip install pymodules[api]         # FastAPI + auto-routing
+pip install pymodules[api-db]      # API + database layer
+
+# Full web stack (API + DB + JWT auth)
+pip install pymodules[web]
 
 # Development (includes testing tools)
 pip install pymodules[dev]
 
 # Everything
-pip install pymodules[all]
+pip install pymodules[full]
 ```
 
 ## Quick Start
@@ -451,6 +462,209 @@ class AsyncGreeterModule(Module):
 await host.handle_async(event)
 ```
 
+## Database Layer
+
+The database layer provides async SQLAlchemy support with useful mixins and a generic repository pattern.
+
+### Model Definitions with Mixins
+
+```python
+from sqlalchemy import Column, String
+from pymodules.db import Base, UUIDMixin, TimestampMixin, SoftDeleteMixin
+
+class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
+    """User model with UUID, timestamps, and soft delete support."""
+
+    __tablename__ = "users"
+
+    name = Column(String(100), nullable=False)
+    email = Column(String(255), nullable=False, unique=True)
+```
+
+**Available Mixins:**
+- `UUIDMixin` - Auto-generated UUID primary key
+- `TimestampMixin` - `created_at` and `updated_at` columns
+- `SoftDeleteMixin` - `is_deleted` flag with `soft_delete()` and `restore()` methods
+
+### Repository Pattern
+
+```python
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from pymodules.db import BaseRepository
+
+# Set up async engine
+engine = create_async_engine("sqlite+aiosqlite:///app.db")
+session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+# Create repository
+user_repo = BaseRepository(session_factory, User)
+
+# CRUD operations
+user = await user_repo.create(name="Alice", email="alice@example.com")
+user = await user_repo.get_by_id(user.id)
+users = await user_repo.get_all(limit=10, offset=0)
+alice = await user_repo.find_one(name="Alice")
+user = await user_repo.update(user.id, name="Alice Smith")
+await user_repo.soft_delete(user.id)  # Soft delete
+await user_repo.restore(user.id)      # Restore
+await user_repo.delete(user.id)       # Hard delete
+count = await user_repo.count()
+```
+
+### Database Settings
+
+```python
+from pymodules.db import DatabaseSettings
+
+# Load from environment variables (PYMODULES_DB_* prefix)
+settings = DatabaseSettings()
+
+# Or configure directly
+settings = DatabaseSettings(
+    url="postgresql+asyncpg://user:pass@localhost/db",
+    pool_size=10,
+    echo=False,
+)
+```
+
+## API Layer
+
+The API layer provides automatic REST endpoint generation from Event classes with convention-based routing.
+
+### ModuleRouter
+
+```python
+from fastapi import FastAPI
+from pymodules import ModuleHost
+from pymodules.api import ModuleRouter, register_error_handlers
+
+# Set up host and modules
+host = ModuleHost()
+host.register(UserModule())
+
+# Create FastAPI app
+app = FastAPI()
+register_error_handlers(app)
+
+# Create router and register events
+router = ModuleRouter(host)
+router.register_event(CreateUser)
+router.register_event(GetUser)
+router.register_event(ListUsers)
+
+# Mount on app
+router.mount(app, prefix="/api/v1")
+```
+
+### Convention-Based Routing
+
+Events are automatically mapped to REST endpoints based on naming:
+
+| Event Name | HTTP Method | Path |
+|------------|-------------|------|
+| `CreateUser` | POST | `/users` |
+| `GetUser` | GET | `/users/{user_id}` |
+| `ListUsers` | GET | `/users` |
+| `UpdateUser` | PUT | `/users/{user_id}` |
+| `DeleteUser` | DELETE | `/users/{user_id}` |
+| `SearchUsers` | POST | `/users/search` |
+
+### Custom Endpoints
+
+Override conventions with decorators:
+
+```python
+from pymodules.api import api_endpoint, exclude_from_api
+
+@api_endpoint(
+    path="/users/search",
+    method="POST",
+    tags=["Users", "Search"],
+    summary="Search users by criteria",
+)
+class SearchUsers(Event[SearchUsersInput, SearchUsersOutput]):
+    pass
+
+@exclude_from_api  # Not exposed as REST endpoint
+class InternalSyncEvent(Event[EventInput, EventOutput]):
+    pass
+```
+
+### Authentication
+
+Pluggable authentication with JWT support:
+
+```python
+from datetime import UTC, datetime, timedelta
+from pymodules.api.auth import AuthMiddleware, AuthProvider, TokenClaims, JWTAuthProvider
+
+# Use built-in JWT provider
+jwt_provider = JWTAuthProvider()  # Reads from PYMODULES_JWT_* env vars
+
+# Or create custom provider
+class MyAuthProvider(AuthProvider):
+    async def validate_token(self, token: str) -> TokenClaims | None:
+        # Your validation logic
+        if is_valid(token):
+            return TokenClaims(
+                sub="user-123",
+                exp=datetime.now(UTC) + timedelta(hours=1),
+                iat=datetime.now(UTC),
+                permissions=["read", "write"],
+            )
+        return None
+
+    async def create_token(self, claims: dict) -> str:
+        # Your token creation logic
+        return generate_token(claims)
+
+# Add middleware to FastAPI app
+app.add_middleware(AuthMiddleware, provider=jwt_provider)
+```
+
+### Complete API Example
+
+```python
+from fastapi import FastAPI
+from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
+from pymodules.api import ModuleRouter, register_error_handlers
+
+# Define events
+class CreateProduct(Event[CreateProductInput, CreateProductOutput]):
+    pass
+
+class GetProduct(Event[GetProductInput, GetProductOutput]):
+    pass
+
+# Define module
+@module(name="products", description="Product management")
+class ProductModule(Module):
+    def can_handle(self, event):
+        return isinstance(event, (CreateProduct, GetProduct))
+
+    async def handle(self, event):
+        if isinstance(event, CreateProduct):
+            # Handle creation
+            event.output = CreateProductOutput(id="123", name=event.input.name)
+            event.handled = True
+        elif isinstance(event, GetProduct):
+            # Handle retrieval
+            event.output = GetProductOutput(id=event.input.product_id, name="Widget")
+            event.handled = True
+
+# Set up application
+host = ModuleHost()
+host.register(ProductModule())
+
+app = FastAPI()
+register_error_handlers(app)
+
+router = ModuleRouter(host)
+router.register_event(CreateProduct)
+router.register_event(GetProduct)
+router.mount(app, prefix="/api/v1")
+```
+
 ## Metrics
 
 ```python
@@ -521,6 +735,36 @@ python -m examples.demo
 uvicorn examples.fastapi_app:app --reload
 # Visit http://localhost:8000/docs for Swagger UI
 ```
+
+## Migration Guide
+
+### From `pymodules.fastapi` to `pymodules.api`
+
+The `pymodules.fastapi` module is deprecated. Migrate to `pymodules.api` for improved auto-discovery and convention-based routing.
+
+**Before (deprecated):**
+```python
+from pymodules.fastapi import PyModulesAPI
+
+api = PyModulesAPI(host)
+api.add_event_endpoint(app, "/users", CreateUser, CreateUserInput, CreateUserOutput)
+```
+
+**After (recommended):**
+```python
+from pymodules.api import ModuleRouter, register_error_handlers
+
+register_error_handlers(app)
+router = ModuleRouter(host)
+router.register_event(CreateUser)  # Auto-generates POST /users
+router.mount(app, prefix="/api/v1")
+```
+
+**Key differences:**
+- `ModuleRouter` automatically infers HTTP method and path from event names
+- No need to specify Input/Output types - they're extracted from the Event class
+- Better error handling with `register_error_handlers()`
+- Support for custom routes via `@api_endpoint` decorator
 
 ## License
 
