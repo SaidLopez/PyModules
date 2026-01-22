@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pymodules
+  labels:
+    app: pymodules
+    app.kubernetes.io/name: pymodules
+    app.kubernetes.io/component: service
+spec:
+  type: ClusterIP
+  selector:
+    app: pymodules
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+---
+# Headless service for direct pod DNS resolution
+# Enables service discovery via DNS: pymodules-headless.namespace.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: pymodules-headless
+  labels:
+    app: pymodules
+    app.kubernetes.io/name: pymodules
+    app.kubernetes.io/component: service-headless
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: pymodules
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP

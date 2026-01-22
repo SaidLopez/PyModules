@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: pymodules
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: pymodules
+  app.kubernetes.io/version: "0.3.0"
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources to include
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Images can be overridden
+images:
+  - name: pymodules
+    newName: pymodules
+    newTag: latest
+
+# Namespace can be set
+# namespace: pymodules
+
+# ConfigMap generator (alternative to static configmap.yaml)
+# configMapGenerator:
+#   - name: pymodules-config
+#     envs:
+#       - config.env
+
+# Replica count patches for different environments
+# patches:
+#   - patch: |-
+#       - op: replace
+#         path: /spec/replicas
+#         value: 5
+#     target:
+#       kind: Deployment
+#       name: pymodules

@@ -1,0 +1,122 @@
+# PyModules Docker Compose Configuration
+# Includes app, Redis for messaging, and optional Consul for service discovery
+
+services:
+  # ==========================================================================
+  # PyModules Application (FastAPI)
+  # ==========================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.fastapi
+    container_name: pymodules-app
+    ports:
+      - "8000:8000"
+    environment:
+      # PyModules configuration
+      PYMODULES_LOG_LEVEL: INFO
+      PYMODULES_ENABLE_METRICS: "true"
+      PYMODULES_ENABLE_TRACING: "false"
+      PYMODULES_MAX_WORKERS: "4"
+      # Message broker configuration
+      PYMODULES_BROKER_TYPE: redis
+      PYMODULES_REDIS_URL: redis://redis:6379/0
+      # Service discovery configuration
+      PYMODULES_DISCOVERY_TYPE: consul
+      PYMODULES_CONSUL_URL: http://consul:8500
+      PYMODULES_SERVICE_NAME: pymodules-app
+      PYMODULES_SERVICE_PORT: "8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - pymodules-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Redis - Message Broker and Persistent DLQ
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: pymodules-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - pymodules-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Consul - Service Discovery (Optional)
+  # ==========================================================================
+  consul:
+    image: hashicorp/consul:1.17
+    container_name: pymodules-consul
+    ports:
+      - "8500:8500"   # HTTP API
+      - "8600:8600/udp"  # DNS
+    command: agent -server -ui -bootstrap-expect=1 -client=0.0.0.0
+    environment:
+      CONSUL_BIND_INTERFACE: eth0
+    volumes:
+      - consul-data:/consul/data
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - pymodules-network
+    restart: unless-stopped
+    profiles:
+      - discovery  # Only start with: docker-compose --profile discovery up
+
+  # ==========================================================================
+  # Redis Commander - Redis UI (Development only)
+  # ==========================================================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: pymodules-redis-ui
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - pymodules-network
+    restart: unless-stopped
+    profiles:
+      - dev  # Only start with: docker-compose --profile dev up
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  pymodules-network:
+    driver: bridge
+    name: pymodules-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  redis-data:
+    name: pymodules-redis-data
+  consul-data:
+    name: pymodules-consul-data

@@ -1,0 +1,73 @@
+# PyModules FastAPI Dockerfile
+# Production-ready FastAPI service with uvicorn
+
+# =============================================================================
+# Stage 1: Builder - Install dependencies and build the package
+# =============================================================================
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN pip install --no-cache-dir hatchling build
+
+# Copy only files needed for the build
+COPY pyproject.toml README.md ./
+COPY pymodules/ ./pymodules/
+
+# Build the wheel
+RUN python -m build --wheel --outdir /build/dist
+
+# =============================================================================
+# Stage 2: Runtime - FastAPI production image
+# =============================================================================
+FROM python:3.12-slim AS runtime
+
+# Security: Run as non-root user
+RUN groupadd --gid 1000 pymodules \
+    && useradd --uid 1000 --gid pymodules --shell /bin/bash --create-home pymodules
+
+WORKDIR /app
+
+# Install the built wheel with FastAPI extras
+COPY --from=builder /build/dist/*.whl /tmp/
+RUN pip install --no-cache-dir "/tmp/$(ls /tmp/*.whl)[fastapi]" && rm /tmp/*.whl
+
+# Copy example FastAPI application
+COPY --chown=pymodules:pymodules examples/fastapi_app.py ./app.py
+
+# Switch to non-root user
+USER pymodules
+
+# Environment variables (12-factor config)
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYMODULES_LOG_LEVEL=INFO \
+    PYMODULES_ENABLE_METRICS=true \
+    PYMODULES_ENABLE_TRACING=false \
+    PYMODULES_MAX_WORKERS=4 \
+    # Uvicorn settings
+    UVICORN_HOST=0.0.0.0 \
+    UVICORN_PORT=8000 \
+    UVICORN_WORKERS=1 \
+    UVICORN_LOG_LEVEL=info
+
+# Expose the FastAPI port
+EXPOSE 8000
+
+# Health check via HTTP
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+# Run uvicorn with the FastAPI app
+CMD ["python", "-m", "uvicorn", "app:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--no-access-log"]
+
+# Labels for container metadata
+LABEL org.opencontainers.image.title="PyModules FastAPI" \
+      org.opencontainers.image.description="Event-driven modular architecture for Python with FastAPI" \
+      org.opencontainers.image.version="0.3.0" \
+      org.opencontainers.image.source="https://github.com/pymodules/pymodules" \
+      org.opencontainers.image.licenses="MIT"

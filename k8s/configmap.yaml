@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pymodules-config
+  labels:
+    app: pymodules
+    app.kubernetes.io/name: pymodules
+    app.kubernetes.io/component: config
+data:
+  # PyModules Core Configuration
+  PYMODULES_LOG_LEVEL: "INFO"
+  PYMODULES_ENABLE_METRICS: "true"
+  PYMODULES_ENABLE_TRACING: "true"
+  PYMODULES_MAX_WORKERS: "4"
+  PYMODULES_PROPAGATE_EXCEPTIONS: "true"
+
+  # Rate Limiting
+  PYMODULES_RATE_LIMIT: "100"
+
+  # Circuit Breaker
+  PYMODULES_CIRCUIT_BREAKER_THRESHOLD: "5"
+  PYMODULES_CIRCUIT_BREAKER_TIMEOUT: "60"
+
+  # Retry Policy
+  PYMODULES_RETRY_MAX_ATTEMPTS: "3"
+  PYMODULES_RETRY_DELAY: "1.0"
+  PYMODULES_RETRY_BACKOFF: "2.0"
+
+  # Dead Letter Queue
+  PYMODULES_DLQ_SIZE: "1000"
+
+  # Message Broker Configuration
+  PYMODULES_BROKER_TYPE: "redis"
+  PYMODULES_REDIS_URL: "redis://redis-service:6379/0"
+  PYMODULES_BROKER_CONSUMER_GROUP: "pymodules-workers"
+  PYMODULES_BROKER_STREAM_PREFIX: "pymodules:"
+
+  # Service Discovery Configuration
+  PYMODULES_DISCOVERY_TYPE: "dns"
+  PYMODULES_SERVICE_NAME: "pymodules"
+  PYMODULES_SERVICE_PORT: "8000"
+
+  # Uvicorn Configuration
+  UVICORN_HOST: "0.0.0.0"
+  UVICORN_PORT: "8000"
+  UVICORN_WORKERS: "1"
+  UVICORN_LOG_LEVEL: "info"
