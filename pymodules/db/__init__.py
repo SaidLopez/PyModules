@@ -22,6 +22,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pymodules._imports import require_optional_dependency
+
+# Check for SQLAlchemy dependency at import time
+require_optional_dependency("sqlalchemy", "pymodules.db", "db")
+
 if TYPE_CHECKING:
     from .base import Base
     from .manager import DatabaseManager

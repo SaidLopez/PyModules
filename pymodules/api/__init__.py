@@ -27,6 +27,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pymodules._imports import require_optional_dependency
+
+# Check for FastAPI dependency at import time
+require_optional_dependency("fastapi", "pymodules.api", "api")
+
 if TYPE_CHECKING:
     from .conventions import HTTPMethod, RESTConvention, RouteConvention, RouteInfo
     from .decorators import api_endpoint, exclude_from_api, get_api_metadata, is_excluded_from_api
