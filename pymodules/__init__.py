@@ -33,6 +33,7 @@ from .health import (
 )
 from .host import ModuleHost
 from .interfaces import Event, EventInput, EventOutput
+from .protocols import AsyncEventHandler, EventHandler, EventLike
 from .logging import configure_logging, get_logger
 from .module import Module, ModuleMetadata, module
 from .resilience import (
@@ -65,6 +66,10 @@ __all__ = [
     "Event",
     "EventInput",
     "EventOutput",
+    # Protocols (structural typing)
+    "EventLike",
+    "EventHandler",
+    "AsyncEventHandler",
     # Module system
     "Module",
     "module",
