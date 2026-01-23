@@ -202,6 +202,104 @@ class ModuleHost:
                 host_logger.warning("Circuit breaker open for event %s", event.name)
                 raise CircuitBreakerOpen("Circuit breaker is open")
 
+    def _prepare_dispatch(self, event: Event) -> str:
+        """
+        Common setup for event dispatch.
+
+        Injects trace context, records event in progress, updates metrics,
+        and calls on_event_start callback.
+
+        Args:
+            event: The event being dispatched
+
+        Returns:
+            event_id for tracking the event
+        """
+        # Inject trace context if tracing enabled
+        if self._config.enable_tracing:
+            inject_trace_context(event)
+
+        event_id = str(id(event))
+        self._events_in_progress[event_id] = event
+
+        if self._metrics:
+            self._metrics.events_dispatched += 1
+
+        if self._config.on_event_start:
+            try:
+                self._config.on_event_start(event)
+            except Exception as e:
+                host_logger.warning("on_event_start callback failed: %s", e)
+
+        return event_id
+
+    def _handle_dispatch_error(self, event: Event, module: Module, error: Exception) -> None:
+        """
+        Common error handling for dispatch failures.
+
+        Logs error, updates metrics, sends to DLQ if configured,
+        and calls on_error callback.
+
+        Args:
+            event: The event that failed
+            module: The module that raised the error
+            error: The exception that was raised
+        """
+        host_logger.error(
+            "Error in module %s handling event %s: %s",
+            module.metadata.name,
+            event.name,
+            error,
+            exc_info=True,
+        )
+
+        if self._metrics:
+            self._metrics.events_failed += 1
+
+        # Send to DLQ if configured
+        if self._config.dead_letter_queue is not None:
+            self._config.dead_letter_queue.add(
+                event=event,
+                error=error,
+                module_name=module.metadata.name,
+            )
+            if self._metrics:
+                self._metrics.events_dead_lettered += 1
+
+        if self._config.on_error:
+            try:
+                self._config.on_error(error, event)
+            except Exception as callback_error:
+                host_logger.warning("on_error callback failed: %s", callback_error)
+
+    def _finalize_dispatch(
+        self, event: Event, event_id: str, error_occurred: Exception | None
+    ) -> None:
+        """
+        Common cleanup after event dispatch.
+
+        Removes event from in-progress, updates metrics, and calls
+        on_event_end callback.
+
+        Args:
+            event: The event that was dispatched
+            event_id: The event tracking ID
+            error_occurred: Any error that occurred during dispatch
+        """
+        del self._events_in_progress[event_id]
+
+        if self._metrics and error_occurred is None:
+            if event.handled:
+                self._metrics.events_handled += 1
+            else:
+                self._metrics.events_unhandled += 1
+
+        if self._config.on_event_end:
+            try:
+                self._config.on_event_end(event, event.handled)
+            except Exception as e:
+                host_logger.warning("on_event_end callback failed: %s", e)
+
     def _handle_with_retry(self, event: Event, module: Module, attempt: int = 0) -> bool:
         """Handle event with retry logic."""
         try:
@@ -273,27 +371,14 @@ class ModuleHost:
             RateLimitExceeded: If rate limit is exceeded.
             CircuitBreakerOpen: If circuit breaker is open.
         """
-        # Inject trace context if tracing enabled
-        if self._config.enable_tracing:
-            inject_trace_context(event)
-
-        # Check rate limit
+        # Check rate limit (sync version)
         self._check_rate_limit(event)
 
         # Check circuit breaker
         self._check_circuit_breaker(event)
 
-        event_id = str(id(event))
-        self._events_in_progress[event_id] = event
-
-        if self._metrics:
-            self._metrics.events_dispatched += 1
-
-        if self._config.on_event_start:
-            try:
-                self._config.on_event_start(event)
-            except Exception as e:
-                host_logger.warning("on_event_start callback failed: %s", e)
+        # Common setup
+        event_id = self._prepare_dispatch(event)
 
         host_logger.debug("Dispatching event: %s (id=%s)", event.name, event_id)
 
@@ -311,32 +396,7 @@ class ModuleHost:
                         self._handle_with_retry(event, module)
                     except Exception as e:
                         error_occurred = e
-                        host_logger.error(
-                            "Error in module %s handling event %s: %s",
-                            module.metadata.name,
-                            event.name,
-                            e,
-                            exc_info=True,
-                        )
-
-                        if self._metrics:
-                            self._metrics.events_failed += 1
-
-                        # Send to DLQ if configured
-                        if self._config.dead_letter_queue is not None:
-                            self._config.dead_letter_queue.add(
-                                event=event,
-                                error=e,
-                                module_name=module.metadata.name,
-                            )
-                            if self._metrics:
-                                self._metrics.events_dead_lettered += 1
-
-                        if self._config.on_error:
-                            try:
-                                self._config.on_error(e, event)
-                            except Exception as callback_error:
-                                host_logger.warning("on_error callback failed: %s", callback_error)
+                        self._handle_dispatch_error(event, module, e)
 
                         if self._config.propagate_exceptions:
                             raise EventHandlingError(
@@ -355,19 +415,7 @@ class ModuleHost:
                         )
                         break
         finally:
-            del self._events_in_progress[event_id]
-
-            if self._metrics and error_occurred is None:
-                if event.handled:
-                    self._metrics.events_handled += 1
-                else:
-                    self._metrics.events_unhandled += 1
-
-            if self._config.on_event_end:
-                try:
-                    self._config.on_event_end(event, event.handled)
-                except Exception as e:
-                    host_logger.warning("on_event_end callback failed: %s", e)
+            self._finalize_dispatch(event, event_id, error_occurred)
 
         return event
 
@@ -389,10 +437,6 @@ class ModuleHost:
             RateLimitExceeded: If rate limit is exceeded.
             CircuitBreakerOpen: If circuit breaker is open.
         """
-        # Inject trace context if tracing enabled
-        if self._config.enable_tracing:
-            inject_trace_context(event)
-
         # Check rate limit (async version)
         if self._config.rate_limiter:
             try:
@@ -406,17 +450,8 @@ class ModuleHost:
         # Check circuit breaker
         self._check_circuit_breaker(event)
 
-        event_id = str(id(event))
-        self._events_in_progress[event_id] = event
-
-        if self._metrics:
-            self._metrics.events_dispatched += 1
-
-        if self._config.on_event_start:
-            try:
-                self._config.on_event_start(event)
-            except Exception as e:
-                host_logger.warning("on_event_start callback failed: %s", e)
+        # Common setup
+        event_id = self._prepare_dispatch(event)
 
         host_logger.debug("Dispatching event async: %s (id=%s)", event.name, event_id)
 
@@ -434,32 +469,7 @@ class ModuleHost:
                         await self._handle_with_retry_async(event, module)
                     except Exception as e:
                         error_occurred = e
-                        host_logger.error(
-                            "Error in module %s handling event %s: %s",
-                            module.metadata.name,
-                            event.name,
-                            e,
-                            exc_info=True,
-                        )
-
-                        if self._metrics:
-                            self._metrics.events_failed += 1
-
-                        # Send to DLQ if configured
-                        if self._config.dead_letter_queue is not None:
-                            self._config.dead_letter_queue.add(
-                                event=event,
-                                error=e,
-                                module_name=module.metadata.name,
-                            )
-                            if self._metrics:
-                                self._metrics.events_dead_lettered += 1
-
-                        if self._config.on_error:
-                            try:
-                                self._config.on_error(e, event)
-                            except Exception as callback_error:
-                                host_logger.warning("on_error callback failed: %s", callback_error)
+                        self._handle_dispatch_error(event, module, e)
 
                         if self._config.propagate_exceptions:
                             raise EventHandlingError(
@@ -478,19 +488,7 @@ class ModuleHost:
                         )
                         break
         finally:
-            del self._events_in_progress[event_id]
-
-            if self._metrics and error_occurred is None:
-                if event.handled:
-                    self._metrics.events_handled += 1
-                else:
-                    self._metrics.events_unhandled += 1
-
-            if self._config.on_event_end:
-                try:
-                    self._config.on_event_end(event, event.handled)
-                except Exception as e:
-                    host_logger.warning("on_event_end callback failed: %s", e)
+            self._finalize_dispatch(event, event_id, error_occurred)
 
         return event
 
