@@ -43,7 +43,7 @@ class CreateUserOutput(EventOutput):
 
 @dataclass
 class GetUserInput(EventInput):
-    user_id: str
+    id: str = ""  # Matches route convention {id}, injected from path
 
 
 @dataclass
@@ -67,7 +67,7 @@ class ListUsersOutput(EventOutput):
 
 @dataclass
 class UpdateUserInput(EventInput):
-    user_id: str
+    id: str = ""  # Matches route convention {id}, injected from path
     name: str | None = None
     email: str | None = None
 
@@ -81,7 +81,7 @@ class UpdateUserOutput(EventOutput):
 
 @dataclass
 class DeleteUserInput(EventInput):
-    user_id: str
+    id: str = ""  # Matches route convention {id}, injected from path
 
 
 @dataclass
@@ -150,7 +150,7 @@ async def full_stack_setup(tmp_path):
                 )
                 event.handled = True
             elif isinstance(event, GetUser):
-                user = await self.repo.get_by_id(UUID(event.input.user_id))
+                user = await self.repo.get_by_id(UUID(event.input.id))
                 if not user:
                     raise ValueError("User not found")
                 event.output = GetUserOutput(
@@ -176,7 +176,7 @@ async def full_stack_setup(tmp_path):
                     updates["name"] = event.input.name
                 if event.input.email:
                     updates["email"] = event.input.email
-                user = await self.repo.update(UUID(event.input.user_id), **updates)
+                user = await self.repo.update(UUID(event.input.id), **updates)
                 event.output = UpdateUserOutput(
                     id=str(user.id),
                     name=user.name,
@@ -184,7 +184,7 @@ async def full_stack_setup(tmp_path):
                 )
                 event.handled = True
             elif isinstance(event, DeleteUser):
-                result = await self.repo.delete(UUID(event.input.user_id))
+                result = await self.repo.delete(UUID(event.input.id))
                 event.output = DeleteUserOutput(success=result)
                 event.handled = True
 
@@ -280,7 +280,7 @@ class TestFullStackIntegration:
         get_route = next((p for p, m in routes if "user" in p.lower() and "GET" in m), None)
 
         if get_route and "{" in get_route:
-            response = client.get(get_route.replace("{user_id}", user_id))
+            response = client.get(get_route.replace("{id}", user_id))
             assert response.status_code == 200
             data = response.json()
             assert data["name"] == "Jane"
@@ -356,7 +356,7 @@ class TestFullStackIntegration:
 
         if update_route and "{" in update_route:
             response = client.put(
-                update_route.replace("{user_id}", user_id), json={"name": "Updated"}
+                update_route.replace("{id}", user_id), json={"name": "Updated"}
             )
             assert response.status_code == 200
             data = response.json()
@@ -393,7 +393,7 @@ class TestFullStackIntegration:
         delete_route = next((p for p, m in routes if "user" in p.lower() and "DELETE" in m), None)
 
         if delete_route and "{" in delete_route:
-            response = client.delete(delete_route.replace("{user_id}", user_id))
+            response = client.request("DELETE", delete_route.replace("{id}", user_id), json={})
             assert response.status_code == 200
             data = response.json()
             assert data["success"] is True
@@ -423,7 +423,7 @@ class TestFullStackIntegration:
         if get_route and "{" in get_route:
             # Try to get non-existent user
             response = client.get(
-                get_route.replace("{user_id}", "00000000-0000-0000-0000-000000000000")
+                get_route.replace("{id}", "00000000-0000-0000-0000-000000000000")
             )
             assert response.status_code >= 400
 
