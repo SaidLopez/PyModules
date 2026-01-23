@@ -207,12 +207,19 @@ class ModuleHost:
         try:
             # Check if handler is async
             if inspect.iscoroutinefunction(module.handle):
-                # Run async handler in event loop
-                loop = asyncio.new_event_loop()
+                # Run async handler - check for existing running loop first
                 try:
-                    loop.run_until_complete(module.handle(event))
-                finally:
-                    loop.close()
+                    asyncio.get_running_loop()
+                    # Cannot safely run async handler from sync handle() when loop is running
+                    raise RuntimeError(
+                        "Cannot call sync handle() with async handler from async context. "
+                        "Use handle_async() instead."
+                    )
+                except RuntimeError as e:
+                    if "Cannot call sync handle()" in str(e):
+                        raise
+                    # No running loop - use asyncio.run() which handles loop lifecycle
+                    asyncio.run(module.handle(event))
             else:
                 module.handle(event)
 

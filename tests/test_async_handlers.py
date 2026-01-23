@@ -72,10 +72,10 @@ class SyncModule(Module):
             event.handled = True
 
 
-@pytest.mark.asyncio
 class TestAsyncHandlers:
     """Tests for native async handler support."""
 
+    @pytest.mark.asyncio
     async def test_async_handler_via_handle_async(self):
         """Async handlers work with handle_async."""
         host = ModuleHost()
@@ -89,6 +89,7 @@ class TestAsyncHandlers:
         assert result.output.result == "async: test"
         assert mod.call_count == 1
 
+    @pytest.mark.asyncio
     async def test_sync_handler_via_handle_async(self):
         """Sync handlers work with handle_async."""
         host = ModuleHost()
@@ -101,6 +102,7 @@ class TestAsyncHandlers:
         assert result.handled
         assert result.output.result == "sync: test"
 
+    @pytest.mark.asyncio
     async def test_concurrent_async_events(self):
         """Multiple async events can run concurrently."""
         host = ModuleHost()
@@ -117,6 +119,7 @@ class TestAsyncHandlers:
 
         assert all(r.handled for r in results)
 
+    @pytest.mark.asyncio
     async def test_async_with_metrics(self):
         """Async handlers work with metrics."""
         config = ModuleHostConfig(enable_metrics=True)
@@ -129,6 +132,7 @@ class TestAsyncHandlers:
         assert host.metrics.events_dispatched == 1
         assert host.metrics.events_handled == 1
 
+    @pytest.mark.asyncio
     async def test_async_with_callbacks(self):
         """Async handlers work with event callbacks."""
         started_events = []
@@ -161,10 +165,10 @@ class TestAsyncHandlers:
         assert result.output.result == "async: test"
 
 
-@pytest.mark.asyncio
 class TestAsyncWithResilience:
     """Tests for async handlers with resilience features."""
 
+    @pytest.mark.asyncio
     async def test_async_with_rate_limiter(self):
         """Async handlers work with rate limiter."""
         from pymodules import RateLimiter, RateLimitExceeded
@@ -185,6 +189,7 @@ class TestAsyncWithResilience:
         with pytest.raises(RateLimitExceeded):
             await host.handle_async(event2)
 
+    @pytest.mark.asyncio
     async def test_async_with_circuit_breaker(self):
         """Async handlers work with circuit breaker."""
         from pymodules import CircuitBreaker, CircuitBreakerOpen
@@ -214,6 +219,7 @@ class TestAsyncWithResilience:
         with pytest.raises(CircuitBreakerOpen):
             await host.handle_async(event2)
 
+    @pytest.mark.asyncio
     async def test_async_with_retry(self):
         """Async handlers work with retry policy."""
         from pymodules import RetryPolicy
@@ -248,3 +254,61 @@ class TestAsyncWithResilience:
         assert event.handled
         assert call_count == 3
         assert host.metrics.events_retried == 2
+
+
+class TestAsyncLoopReuse:
+    """Tests for event loop management in async handlers."""
+
+    @pytest.mark.asyncio
+    async def test_async_handle_reuses_event_loop(self):
+        """Verify handle_async reuses the same event loop for async handlers."""
+        loop_ids = []
+
+        @module(name="LoopTracker")
+        class LoopTrackerModule(Module):
+            def can_handle(self, event):
+                return event.name == "track"
+
+            async def handle(self, event):
+                loop_ids.append(id(asyncio.get_running_loop()))
+                event.handled = True
+
+        host = ModuleHost()
+        host.register(LoopTrackerModule())
+
+        event1 = Event(name="track", input=EventInput())
+        event2 = Event(name="track", input=EventInput())
+
+        await host.handle_async(event1)
+        await host.handle_async(event2)
+
+        assert len(loop_ids) == 2, "Should have tracked two loop IDs"
+        assert len(set(loop_ids)) == 1, "Should reuse the same event loop"
+
+    def test_sync_handle_with_async_handler_uses_asyncio_run(self):
+        """Verify sync handle uses asyncio.run for async handlers (no nested loops)."""
+        call_count = 0
+
+        @module(name="AsyncCounter")
+        class AsyncCounterModule(Module):
+            def can_handle(self, event):
+                return event.name == "count"
+
+            async def handle(self, event):
+                nonlocal call_count
+                call_count += 1
+                event.handled = True
+
+        host = ModuleHost()
+        host.register(AsyncCounterModule())
+
+        # Multiple sync calls with async handlers should work without issues
+        event1 = Event(name="count", input=EventInput())
+        event2 = Event(name="count", input=EventInput())
+
+        host.handle(event1)
+        host.handle(event2)
+
+        assert call_count == 2, "Both events should be handled"
+        assert event1.handled
+        assert event2.handled
