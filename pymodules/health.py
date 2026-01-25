@@ -201,9 +201,7 @@ class HealthCheck:
         self._liveness_checks.pop(name, None)
         self._readiness_checks.pop(name, None)
 
-    def _run_checks(
-        self, checks: dict[str, Callable[[], HealthCheckResult]]
-    ) -> HealthReport:
+    def _run_checks(self, checks: dict[str, Callable[[], HealthCheckResult]]) -> HealthReport:
         """Run a set of health checks and compile report."""
         results: list[HealthCheckResult] = []
         overall_status = HealthStatus.HEALTHY
@@ -224,7 +222,9 @@ class HealthCheck:
             # Update overall status (worst wins)
             if result.status == HealthStatus.UNHEALTHY:
                 overall_status = HealthStatus.UNHEALTHY
-            elif result.status == HealthStatus.DEGRADED and overall_status != HealthStatus.UNHEALTHY:
+            elif (
+                result.status == HealthStatus.DEGRADED and overall_status != HealthStatus.UNHEALTHY
+            ):
                 overall_status = HealthStatus.DEGRADED
 
         return HealthReport(

@@ -2,22 +2,16 @@
 Tests for messaging package: broker, consumer, persistent DLQ.
 """
 
-import asyncio
 import json
-import time
 from dataclasses import dataclass
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
 from pymodules.messaging.broker import (
-    BrokerConnectionError,
-    ConsumeError,
     Message,
     MessageBroker,
     MessageBrokerConfig,
-    PublishError,
 )
 from pymodules.messaging.consumer import (
     EventConsumer,
@@ -25,7 +19,6 @@ from pymodules.messaging.consumer import (
     ExternalEvent,
     ExternalEventInput,
 )
-
 
 # =============================================================================
 # Test Fixtures

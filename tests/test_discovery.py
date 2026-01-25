@@ -2,24 +2,19 @@
 Tests for service discovery: registry, DNS, Consul adapter.
 """
 
-import asyncio
-import socket
-from dataclasses import dataclass
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
+from pymodules.discovery.dns import DNSRegistryConfig, DNSServiceRegistry
 from pymodules.discovery.registry import (
     DiscoveryError,
     RegistrationError,
     ServiceInstance,
     ServiceNotFoundError,
-    ServiceRegistry,
     ServiceRegistryConfig,
     ServiceStatus,
 )
-from pymodules.discovery.dns import DNSRegistryConfig, DNSServiceRegistry
-
 
 # =============================================================================
 # ServiceInstance Tests
@@ -282,7 +277,7 @@ class TestDNSServiceRegistry:
         )
 
         # Mock the internal resolver to return localhost
-        with patch.object(registry, '_resolve_dns', return_value=['127.0.0.1']):
+        with patch.object(registry, "_resolve_dns", return_value=["127.0.0.1"]):
             instances = await registry.discover("localhost")
 
             assert len(instances) >= 1
@@ -305,7 +300,7 @@ class TestDNSServiceRegistry:
             resolve_count += 1
             return ["10.0.0.1", "10.0.0.2"]
 
-        with patch.object(registry, '_resolve_dns', side_effect=mock_resolve):
+        with patch.object(registry, "_resolve_dns", side_effect=mock_resolve):
             # First call - should resolve
             await registry.discover("test-service")
             assert resolve_count == 1
@@ -447,7 +442,7 @@ class TestDiscoveryIntegration:
         def mock_resolve(dns_name: str) -> list[str]:
             return ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
 
-        with patch.object(registry, '_resolve_dns', side_effect=mock_resolve):
+        with patch.object(registry, "_resolve_dns", side_effect=mock_resolve):
             # Clear cache between calls to force selection logic
             registry.clear_cache()
 
@@ -467,6 +462,6 @@ class TestDiscoveryIntegration:
         registry = DNSServiceRegistry()
 
         # Mock resolver to return empty list
-        with patch.object(registry, '_resolve_dns', return_value=[]):
+        with patch.object(registry, "_resolve_dns", return_value=[]):
             with pytest.raises(ServiceNotFoundError):
                 await registry.discover("nonexistent-service")

@@ -145,9 +145,7 @@ class TestCircuitBreaker:
 
     def test_closes_after_success_in_half_open(self):
         """Circuit breaker closes after successes in half-open."""
-        breaker = CircuitBreaker(
-            failure_threshold=1, recovery_timeout=0.1, success_threshold=2
-        )
+        breaker = CircuitBreaker(failure_threshold=1, recovery_timeout=0.1, success_threshold=2)
 
         breaker.record_failure()
         time.sleep(0.15)
@@ -361,9 +359,7 @@ class TestFallback:
 
     def test_specific_exceptions(self):
         """Fallback only catches specified exceptions."""
-        fallback = Fallback(
-            default_value="fallback", exceptions=(ValueError,), log_errors=False
-        )
+        fallback = Fallback(default_value="fallback", exceptions=(ValueError,), log_errors=False)
 
         @fallback
         def raises_value_error():

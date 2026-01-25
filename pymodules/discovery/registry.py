@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-
 # =============================================================================
 # Exceptions
 # =============================================================================
@@ -193,17 +192,11 @@ class ServiceRegistryConfig:
 
         return cls(
             service_name=os.getenv("PYMODULES_SERVICE_NAME", "pymodules-service"),
-            instance_id=os.getenv(
-                "PYMODULES_SERVICE_ID", f"instance-{uuid.uuid4().hex[:8]}"
-            ),
+            instance_id=os.getenv("PYMODULES_SERVICE_ID", f"instance-{uuid.uuid4().hex[:8]}"),
             host=host,
             port=int(os.getenv("PYMODULES_SERVICE_PORT", "8000")),
-            health_check_interval=float(
-                os.getenv("PYMODULES_HEALTH_CHECK_INTERVAL", "10.0")
-            ),
-            health_check_timeout=float(
-                os.getenv("PYMODULES_HEALTH_CHECK_TIMEOUT", "5.0")
-            ),
+            health_check_interval=float(os.getenv("PYMODULES_HEALTH_CHECK_INTERVAL", "10.0")),
+            health_check_timeout=float(os.getenv("PYMODULES_HEALTH_CHECK_TIMEOUT", "5.0")),
             tags=tags,
         )
 
@@ -277,8 +270,9 @@ class ServiceRegistry(ABC):
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type: type | None, exc_val: Exception | None,
-                        exc_tb: object) -> None:
+    async def __aexit__(
+        self, exc_type: type | None, exc_val: Exception | None, exc_tb: object
+    ) -> None:
         """Async context manager exit."""
         await self.disconnect()
 

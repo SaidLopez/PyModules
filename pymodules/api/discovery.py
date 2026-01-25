@@ -159,7 +159,7 @@ class EventDiscovery:
             for prefix in ["create", "get", "update", "delete", "list", "search"]:
                 if class_name.lower().startswith(prefix):
                     action = prefix
-                    domain = class_name[len(prefix):].lower()
+                    domain = class_name[len(prefix) :].lower()
                     break
             if not domain:
                 domain = class_name.lower()

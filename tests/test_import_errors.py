@@ -11,9 +11,7 @@ def test_require_optional_dependency_raises_clear_error():
     # Mock a missing module
     with patch.dict(sys.modules, {"nonexistent_module": None}):
         try:
-            require_optional_dependency(
-                "nonexistent_module", "pymodules.test", "test"
-            )
+            require_optional_dependency("nonexistent_module", "pymodules.test", "test")
             assert False, "Should have raised ImportError"
         except ImportError as e:
             assert "pip install pymodules[test]" in str(e)

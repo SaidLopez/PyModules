@@ -14,6 +14,7 @@ from typing import Annotated, Any, TypeVar
 from fastapi import APIRouter, Body, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, create_model
+
 from pymodules import Event, EventInput, ModuleHost
 
 from .conventions import HTTPMethod, RESTConvention, RouteConvention, RouteInfo
@@ -119,7 +120,7 @@ class ModuleRouter:
 
         return count
 
-    def register_event(self, event_class: type[Event[Any, Any]]) -> "ModuleRouter":
+    def register_event(self, event_class: type[Event[Any, Any]]) -> ModuleRouter:
         """Manually register a single event class.
 
         Args:
@@ -209,6 +210,7 @@ class ModuleRouter:
         if requires_id:
             # Endpoint with path parameter
             if route.method == HTTPMethod.GET:
+
                 async def endpoint_get_with_id(
                     request: Request,
                     id: str = Path(..., description="Resource ID"),
@@ -253,6 +255,7 @@ class ModuleRouter:
         else:
             # Endpoint without path parameter
             if route.method == HTTPMethod.GET:
+
                 async def endpoint_get_no_id(request: Request) -> Any:
                     return await _dispatch_event(
                         host=host,
@@ -352,9 +355,7 @@ async def _dispatch_event(
                 try:
                     path_id = UUID(path_id)  # type: ignore[assignment]
                 except ValueError as e:
-                    raise HTTPException(
-                        status_code=400, detail=f"Invalid UUID: {path_id}"
-                    ) from e
+                    raise HTTPException(status_code=400, detail=f"Invalid UUID: {path_id}") from e
         input_data[id_param_name] = path_id
 
     # Create input instance
@@ -374,9 +375,7 @@ async def _dispatch_event(
         # Check for common error patterns
         error_msg = str(e).lower()
         if "not found" in error_msg:
-            raise NotFoundError(
-                event_class.__name__.replace("Event", ""), str(path_id)
-            ) from e
+            raise NotFoundError(event_class.__name__.replace("Event", ""), str(path_id)) from e
         raise HTTPException(status_code=500, detail=str(e)) from e
 
     if not event.handled:

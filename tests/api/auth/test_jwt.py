@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-
 import pytest
 
 
@@ -63,9 +61,7 @@ class TestJWTAuthProvider:
     @pytest.mark.asyncio
     async def test_create_token_returns_string(self, jwt_provider) -> None:
         """create_token should return a token string."""
-        token = await jwt_provider.create_token(
-            {"sub": "user123", "permissions": ["read"]}
-        )
+        token = await jwt_provider.create_token({"sub": "user123", "permissions": ["read"]})
 
         assert isinstance(token, str)
         assert len(token) > 0
@@ -75,9 +71,7 @@ class TestJWTAuthProvider:
         """validate_token should return TokenClaims for valid token."""
         from pymodules.api.auth import TokenClaims
 
-        token = await jwt_provider.create_token(
-            {"sub": "user123", "permissions": ["read"]}
-        )
+        token = await jwt_provider.create_token({"sub": "user123", "permissions": ["read"]})
 
         claims = await jwt_provider.validate_token(token)
 
@@ -145,6 +139,4 @@ class TestJWTAuthProvider:
         assert claims.sub == "user123"
         assert claims.permissions == ["read", "write"]
         # Extra claims stored in extra dict
-        assert claims.extra.get("email") == "user@example.com" or hasattr(
-            claims, "email"
-        )
+        assert claims.extra.get("email") == "user@example.com" or hasattr(claims, "email")

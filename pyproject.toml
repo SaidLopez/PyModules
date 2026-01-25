@@ -157,10 +157,15 @@ ignore = [
     "B027",   # empty method in abstract class (intentional for optional lifecycle hooks)
     "SIM102", # nested if statements (sometimes clearer)
     "SIM103", # return condition directly (sometimes clearer with explicit branches)
+    "SIM105", # contextlib.suppress vs try-except-pass (preference)
+    "SIM108", # ternary operator (sometimes if-else is clearer)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ARG001", "ARG002", "ARG005", "E731", "SIM105"]  # Allow unused args and lambdas in tests
+"tests/*" = ["ARG001", "ARG002", "ARG005", "E731", "SIM105", "SIM117", "UP038", "B011"]  # Allow unused args, lambdas, and test patterns
+"pymodules/*/__init__.py" = ["F401"]  # Allow "unused" imports in lazy loading __getattr__ patterns
+"pymodules/db/mixins.py" = ["ARG002"]  # SQLAlchemy TypeDecorator requires dialect param
+"pymodules/discovery/dns.py" = ["ARG002"]  # Interface methods require params for API compatibility
 
 [tool.ruff.lint.isort]
 known-first-party = ["pymodules"]

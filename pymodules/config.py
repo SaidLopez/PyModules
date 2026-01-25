@@ -174,7 +174,7 @@ class ModuleHostConfig:
                 pass  # redis not installed
 
         # Service registry configuration
-        service_registry: "ServiceRegistry | None" = None
+        service_registry: ServiceRegistry | None = None
         discovery_type = os.getenv("PYMODULES_DISCOVERY_TYPE", "").lower()
         if discovery_type == "dns":
             try:

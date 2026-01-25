@@ -31,9 +31,7 @@ class TestBaseRepository:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-        session_factory = async_sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
-        )
+        session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
         yield engine, session_factory
 
@@ -265,9 +263,7 @@ class TestBaseRepository:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_list_includes_soft_deleted_when_requested(
-        self, populated_repository
-    ) -> None:
+    async def test_list_includes_soft_deleted_when_requested(self, populated_repository) -> None:
         """list should include soft-deleted when include_deleted=True."""
         repository, entities = populated_repository
 

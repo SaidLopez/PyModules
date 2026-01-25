@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import pytest
-
 
 class TestApiEndpointDecorator:
     """Tests for @api_endpoint decorator."""

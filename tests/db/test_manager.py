@@ -96,7 +96,7 @@ class TestDatabaseManager:
         manager = DatabaseManager("sqlite+aiosqlite:///:memory:")
         await manager.connect()
 
-        engine = manager.engine
+        assert manager.engine is not None  # Verify engine exists before disconnect
         await manager.disconnect()
 
         # Engine should be disposed (pool closed)

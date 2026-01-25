@@ -90,6 +90,7 @@ def test_non_conforming_handler_fails_isinstance():
     class IncompleteHandler:
         def can_handle(self, event) -> bool:
             return True
+
         # Missing: handle method
 
     incomplete = IncompleteHandler()

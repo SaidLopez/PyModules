@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestHTTPMethod:
     """Tests for HTTPMethod enum."""

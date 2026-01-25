@@ -10,8 +10,9 @@ import json
 import time
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -244,8 +245,9 @@ class MessageBroker(ABC):
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type: type | None, exc_val: Exception | None,
-                        exc_tb: object) -> None:
+    async def __aexit__(
+        self, exc_type: type | None, exc_val: Exception | None, exc_tb: object
+    ) -> None:
         """Async context manager exit."""
         await self.disconnect()
 

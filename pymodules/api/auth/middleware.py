@@ -105,10 +105,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     def _is_excluded(self, path: str) -> bool:
         """Check if a path is excluded from authentication."""
-        for pattern in self.exclude_paths:
-            if fnmatch.fnmatch(path, pattern):
-                return True
-        return False
+        return any(fnmatch.fnmatch(path, pattern) for pattern in self.exclude_paths)
 
 
 def get_current_user(request: Any) -> TokenClaims | None:
@@ -230,9 +227,7 @@ def require_permissions(
                     },
                 )
 
-            return (
-                await func(*args, **kwargs) if _is_async(func) else func(*args, **kwargs)
-            )
+            return await func(*args, **kwargs) if _is_async(func) else func(*args, **kwargs)
 
         return wrapper
 

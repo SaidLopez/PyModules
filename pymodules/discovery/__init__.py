@@ -52,8 +52,14 @@ __all__ = [
 
 def __getattr__(name: str) -> object:
     """Lazy import discovery components."""
-    if name in ("ServiceInstance", "ServiceRegistry", "ServiceRegistryConfig",
-                "DiscoveryError", "RegistrationError", "ServiceNotFoundError"):
+    if name in (
+        "ServiceInstance",
+        "ServiceRegistry",
+        "ServiceRegistryConfig",
+        "DiscoveryError",
+        "RegistrationError",
+        "ServiceNotFoundError",
+    ):
         from .registry import (
             DiscoveryError,
             RegistrationError,
@@ -62,14 +68,17 @@ def __getattr__(name: str) -> object:
             ServiceRegistry,
             ServiceRegistryConfig,
         )
+
         return locals()[name]
 
     if name in ("DNSServiceRegistry", "DNSRegistryConfig"):
         from .dns import DNSRegistryConfig, DNSServiceRegistry
+
         return locals()[name]
 
     if name in ("ConsulServiceRegistry", "ConsulRegistryConfig"):
         from .consul import ConsulRegistryConfig, ConsulServiceRegistry
+
         return locals()[name]
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

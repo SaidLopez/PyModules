@@ -26,9 +26,7 @@ class ModuleMetadata:
     version: str = "1.0.0"
 
 
-def module(
-    name: str = "", description: str = "", version: str = "1.0.0"
-) -> Callable[[type], type]:
+def module(name: str = "", description: str = "", version: str = "1.0.0") -> Callable[[type], type]:
     """
     Decorator to add metadata to a module class.
 

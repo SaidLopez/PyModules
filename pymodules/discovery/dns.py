@@ -10,12 +10,10 @@ from __future__ import annotations
 import asyncio
 import socket
 from dataclasses import dataclass, field
-from typing import Any
 
 from ..logging import get_logger
 from .registry import (
     DiscoveryError,
-    RegistrationError,
     ServiceInstance,
     ServiceNotFoundError,
     ServiceRegistry,
@@ -282,9 +280,7 @@ class DNSServiceRegistry(ServiceRegistry):
             logger.error("DNS resolution failed for %s: %s", service_name, e)
             raise DiscoveryError(f"Failed to discover {service_name}: {e}") from e
 
-    async def _resolve_service(
-        self, dns_name: str, service_name: str
-    ) -> list[ServiceInstance]:
+    async def _resolve_service(self, dns_name: str, service_name: str) -> list[ServiceInstance]:
         """Resolve service DNS to instances."""
         instances: list[ServiceInstance] = []
 
@@ -361,6 +357,7 @@ class DNSServiceRegistry(ServiceRegistry):
 
         # Simple round-robin using hash of service name + time
         import time
+
         index = int(time.time() * 1000) % len(instances)
         return instances[index]
 
@@ -387,9 +384,7 @@ class DNSServiceRegistry(ServiceRegistry):
         """Check if DNS is accessible."""
         try:
             await asyncio.wait_for(
-                asyncio.get_event_loop().run_in_executor(
-                    None, socket.gethostbyname, "localhost"
-                ),
+                asyncio.get_event_loop().run_in_executor(None, socket.gethostbyname, "localhost"),
                 timeout=self.config.resolve_timeout,
             )
             return True

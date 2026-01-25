@@ -93,8 +93,8 @@ class APIError(Exception):
     ):
         self.message = message
         self.code = code or ErrorCode.INTERNAL_ERROR
-        self.status_code = status_code if status_code != 500 else ERROR_CODE_STATUS_MAP.get(
-            self.code, 500
+        self.status_code = (
+            status_code if status_code != 500 else ERROR_CODE_STATUS_MAP.get(self.code, 500)
         )
         self.details = details
         super().__init__(message)
@@ -136,9 +136,7 @@ class ValidationError(APIError):
         message: str,
         details: dict[str, Any] | None = None,
     ):
-        super().__init__(
-            message, code=ErrorCode.VALIDATION_ERROR, status_code=422, details=details
-        )
+        super().__init__(message, code=ErrorCode.VALIDATION_ERROR, status_code=422, details=details)
 
 
 class AuthenticationError(APIError):
@@ -179,14 +177,14 @@ def register_error_handlers(app: Any) -> None:
     from fastapi import Request
     from fastapi.responses import JSONResponse
 
-    async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
+    async def api_error_handler(_request: Request, exc: APIError) -> JSONResponse:
         """FastAPI exception handler for APIError."""
         return JSONResponse(
             status_code=exc.status_code,
             content=exc.to_response().model_dump(),
         )
 
-    async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    async def generic_error_handler(_request: Request, _exc: Exception) -> JSONResponse:
         """FastAPI exception handler for unhandled exceptions."""
         return JSONResponse(
             status_code=500,

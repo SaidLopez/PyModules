@@ -313,9 +313,7 @@ class RetryPolicy:
     base_delay: float = 1.0
     max_delay: float = 60.0
     exponential_base: float = 2.0
-    retryable_exceptions: tuple[type[Exception], ...] = field(
-        default_factory=lambda: (Exception,)
-    )
+    retryable_exceptions: tuple[type[Exception], ...] = field(default_factory=lambda: (Exception,))
 
     def calculate_delay(self, attempt: int) -> float:
         """Calculate delay for given attempt number."""
@@ -602,9 +600,7 @@ class Fallback:
                 return func(*args, **kwargs)
             except self.exceptions as e:
                 if self.log_errors:
-                    resilience_logger.warning(
-                        "Fallback triggered for %s: %s", func.__name__, e
-                    )
+                    resilience_logger.warning("Fallback triggered for %s: %s", func.__name__, e)
                 return self.get_fallback()
 
         @wraps(func)
@@ -613,9 +609,7 @@ class Fallback:
                 return await func(*args, **kwargs)
             except self.exceptions as e:
                 if self.log_errors:
-                    resilience_logger.warning(
-                        "Fallback triggered for %s: %s", func.__name__, e
-                    )
+                    resilience_logger.warning("Fallback triggered for %s: %s", func.__name__, e)
                 return self.get_fallback()
 
         if asyncio.iscoroutinefunction(func):

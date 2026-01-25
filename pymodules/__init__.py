@@ -33,9 +33,9 @@ from .health import (
 )
 from .host import ModuleHost
 from .interfaces import Event, EventInput, EventOutput
-from .protocols import AsyncEventHandler, EventHandler, EventLike
 from .logging import configure_logging, get_logger
 from .module import Module, ModuleMetadata, module
+from .protocols import AsyncEventHandler, EventHandler, EventLike
 from .resilience import (
     CircuitBreaker,
     CircuitBreakerOpen,
@@ -134,14 +134,18 @@ def __getattr__(name: str) -> object:
     """Lazy import optional subpackages."""
     if name == "messaging":
         from . import messaging
+
         return messaging
     if name == "discovery":
         from . import discovery
+
         return discovery
     if name == "api":
         from . import api
+
         return api
     if name == "db":
         from . import db
+
         return db
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

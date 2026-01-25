@@ -9,7 +9,7 @@ from uuid import UUID
 import pytest
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 
 @pytest.fixture
@@ -31,7 +31,6 @@ async def db_session(
 ) -> AsyncGenerator[AsyncSession, None]:
     """Create an async session for testing."""
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-    from sqlalchemy.orm import DeclarativeBase
 
     # Import Base to create tables
     from pymodules.db import Base

@@ -8,7 +8,6 @@ Requires the 'python-consul' package (optional dependency).
 from __future__ import annotations
 
 import asyncio
-import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -80,6 +79,7 @@ class ConsulRegistryConfig(ServiceRegistryConfig):
 
         if consul_url:
             from urllib.parse import urlparse
+
             parsed = urlparse(consul_url)
             consul_host = parsed.hostname or "localhost"
             consul_port = parsed.port or 8500
@@ -101,9 +101,7 @@ class ConsulRegistryConfig(ServiceRegistryConfig):
             consul_token=os.getenv("PYMODULES_CONSUL_TOKEN", ""),
             consul_scheme=consul_scheme,
             health_check_http=os.getenv("PYMODULES_HEALTH_CHECK_HTTP", "/health"),
-            deregister_critical_after=os.getenv(
-                "PYMODULES_CONSUL_DEREGISTER_AFTER", "1m"
-            ),
+            deregister_critical_after=os.getenv("PYMODULES_CONSUL_DEREGISTER_AFTER", "1m"),
         )
 
 
@@ -179,8 +177,7 @@ class ConsulServiceRegistry(ServiceRegistry):
             import consul.aio
         except ImportError as e:
             raise DiscoveryError(
-                "python-consul package not installed. "
-                "Install with: pip install pymodules[consul]"
+                "python-consul package not installed. Install with: pip install pymodules[consul]"
             ) from e
 
         try:
@@ -385,6 +382,7 @@ class ConsulServiceRegistry(ServiceRegistry):
 
         # Weight-based selection
         import random
+
         total_weight = sum(i.weight for i in instances)
         if total_weight == 0:
             return random.choice(instances)
@@ -480,6 +478,7 @@ class ConsulServiceRegistry(ServiceRegistry):
         Returns:
             Background task for the watcher.
         """
+
         async def _watcher() -> None:
             last_index = 0
             while True:

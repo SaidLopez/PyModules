@@ -54,9 +54,7 @@ class BaseRepository(Generic[ModelT]):
         """Create a new session."""
         return self._session_factory()
 
-    def _apply_soft_delete_filter(
-        self, query: Select, include_deleted: bool = False
-    ) -> Select:
+    def _apply_soft_delete_filter(self, query: Select, include_deleted: bool = False) -> Select:
         """Apply soft delete filter if model supports it.
 
         Args:
@@ -72,9 +70,7 @@ class BaseRepository(Generic[ModelT]):
             query = query.where(self._model_class.is_deleted == False)  # noqa: E712
         return query
 
-    async def get_by_id(
-        self, id: UUID | str, *, include_deleted: bool = False
-    ) -> ModelT | None:
+    async def get_by_id(self, id: UUID | str, *, include_deleted: bool = False) -> ModelT | None:
         """Get a record by ID.
 
         Args:
@@ -128,9 +124,7 @@ class BaseRepository(Generic[ModelT]):
             result = await session.execute(query)
             return result.scalars().all()
 
-    async def find_one(
-        self, *, include_deleted: bool = False, **kwargs: Any
-    ) -> ModelT | None:
+    async def find_one(self, *, include_deleted: bool = False, **kwargs: Any) -> ModelT | None:
         """Find a single record by attributes.
 
         Args:
@@ -250,9 +244,7 @@ class BaseRepository(Generic[ModelT]):
             await session.commit()
             return True
 
-    async def count(
-        self, *, include_deleted: bool = False, **kwargs: Any
-    ) -> int:
+    async def count(self, *, include_deleted: bool = False, **kwargs: Any) -> int:
         """Count records matching filters.
 
         Args:
@@ -263,11 +255,7 @@ class BaseRepository(Generic[ModelT]):
             Number of matching records
         """
         async with self._session() as session:
-            query = (
-                select(func.count())
-                .select_from(self._model_class)
-                .filter_by(**kwargs)
-            )
+            query = select(func.count()).select_from(self._model_class).filter_by(**kwargs)
             query = self._apply_soft_delete_filter(query, include_deleted)
             result = await session.execute(query)
             return result.scalar_one()

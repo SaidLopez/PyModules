@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestAPIError:
     """Tests for APIError base class."""
@@ -67,9 +65,7 @@ class TestSpecificErrors:
         """AuthorizationError should have 403 status."""
         from pymodules.api import AuthorizationError
 
-        error = AuthorizationError(
-            message="Permission denied", required_permissions=["admin"]
-        )
+        error = AuthorizationError(message="Permission denied", required_permissions=["admin"])
 
         assert error.status_code == 403
         assert "admin" in str(error.required_permissions)

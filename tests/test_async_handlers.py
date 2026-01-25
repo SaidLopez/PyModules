@@ -109,10 +109,7 @@ class TestAsyncHandlers:
         host.register(AsyncModule())
 
         # Create multiple events with delays
-        events = [
-            AsyncEvent(input=AsyncInput(value=f"event{i}", delay=0.01))
-            for i in range(5)
-        ]
+        events = [AsyncEvent(input=AsyncInput(value=f"event{i}", delay=0.01)) for i in range(5)]
 
         # Dispatch concurrently
         results = await asyncio.gather(*[host.handle_async(e) for e in events])
@@ -173,9 +170,7 @@ class TestAsyncWithResilience:
         """Async handlers work with rate limiter."""
         from pymodules import RateLimiter, RateLimitExceeded
 
-        config = ModuleHostConfig(
-            rate_limiter=RateLimiter(rate=1, burst=1, block=False)
-        )
+        config = ModuleHostConfig(rate_limiter=RateLimiter(rate=1, burst=1, block=False))
         host = ModuleHost(config=config)
         host.register(AsyncModule())
 

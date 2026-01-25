@@ -52,8 +52,15 @@ __all__ = [
 
 def __getattr__(name: str) -> object:
     """Lazy import messaging components."""
-    if name in ("Message", "MessageBroker", "MessageBrokerConfig", "MessagingError",
-                "BrokerConnectionError", "PublishError", "ConsumeError"):
+    if name in (
+        "Message",
+        "MessageBroker",
+        "MessageBrokerConfig",
+        "MessagingError",
+        "BrokerConnectionError",
+        "PublishError",
+        "ConsumeError",
+    ):
         from .broker import (
             BrokerConnectionError,
             ConsumeError,
@@ -63,22 +70,27 @@ def __getattr__(name: str) -> object:
             MessagingError,
             PublishError,
         )
+
         return locals()[name]
 
     if name in ("RedisBroker", "RedisBrokerConfig"):
         from .redis_broker import RedisBroker, RedisBrokerConfig
+
         return locals()[name]
 
     if name in ("EventConsumer", "EventConsumerConfig"):
         from .consumer import EventConsumer, EventConsumerConfig
+
         return locals()[name]
 
     if name == "PersistentDeadLetterQueue":
         from .persistent_dlq import PersistentDeadLetterQueue
+
         return PersistentDeadLetterQueue
 
     if name in ("KafkaBrokerProtocol", "RabbitMQBrokerProtocol"):
         from .protocols import KafkaBrokerProtocol, RabbitMQBrokerProtocol
+
         return locals()[name]
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

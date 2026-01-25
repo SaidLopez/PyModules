@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from typing import TYPE_CHECKING, Any
 
 from ..interfaces import Event, EventInput, EventOutput
 from ..logging import get_logger
@@ -304,7 +304,7 @@ class EventConsumer:
             stream = message.stream
             prefix = self.broker.config.stream_prefix
             if stream.startswith(prefix):
-                event_name = stream[len(prefix):]
+                event_name = stream[len(prefix) :]
             else:
                 event_name = stream
 

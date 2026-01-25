@@ -132,9 +132,7 @@ class JWTAuthProvider(AuthProvider):
             ) from e
 
         # Calculate expiration
-        expire = datetime.now(UTC) + timedelta(
-            minutes=self.settings.access_token_expire_minutes
-        )
+        expire = datetime.now(UTC) + timedelta(minutes=self.settings.access_token_expire_minutes)
 
         # Build token payload
         to_encode = claims.copy()

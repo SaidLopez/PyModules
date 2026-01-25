@@ -48,9 +48,7 @@ class TestAuthMiddleware:
             return {"status": "ok"}
 
         client = TestClient(app)
-        response = client.get(
-            "/protected", headers={"Authorization": "Bearer valid-token"}
-        )
+        response = client.get("/protected", headers={"Authorization": "Bearer valid-token"})
 
         assert response.status_code == 200
 
@@ -90,9 +88,7 @@ class TestAuthMiddleware:
             return {"status": "ok"}
 
         client = TestClient(app)
-        response = client.get(
-            "/protected", headers={"Authorization": "Bearer invalid-token"}
-        )
+        response = client.get("/protected", headers={"Authorization": "Bearer invalid-token"})
 
         assert response.status_code == 401
 
@@ -130,7 +126,7 @@ class TestAuthMiddleware:
     @pytest.mark.asyncio
     async def test_injects_user_into_request(self, mock_provider) -> None:
         """Middleware should inject user claims into request state."""
-        from fastapi import FastAPI, Request
+        from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         from pymodules.api.auth import AuthMiddleware
@@ -144,9 +140,7 @@ class TestAuthMiddleware:
             return {"user_id": user.sub, "permissions": user.permissions}
 
         client = TestClient(app)
-        response = client.get(
-            "/whoami", headers={"Authorization": "Bearer valid-token"}
-        )
+        response = client.get("/whoami", headers={"Authorization": "Bearer valid-token"})
 
         assert response.status_code == 200
         data = response.json()
@@ -182,9 +176,7 @@ class TestAuthMiddleware:
             return {"ok": True}
 
         client = TestClient(app)
-        response = client.get(
-            "/test", headers={"Authorization": "Bearer custom-user456"}
-        )
+        response = client.get("/test", headers={"Authorization": "Bearer custom-user456"})
 
         assert response.status_code == 200
 
@@ -237,9 +229,7 @@ class TestHelperFunctions:
                 return "token"
 
         app = FastAPI()
-        app.add_middleware(
-            AuthMiddleware, provider=MockProvider(), exclude_paths=["/public"]
-        )
+        app.add_middleware(AuthMiddleware, provider=MockProvider(), exclude_paths=["/public"])
 
         @app.get("/public")
         def public():
@@ -265,7 +255,7 @@ class TestHelperFunctions:
 
     def test_require_permissions_decorator(self) -> None:
         """require_permissions should check user permissions."""
-        from fastapi import FastAPI, Request
+        from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         from pymodules.api.auth import (
@@ -307,13 +297,9 @@ class TestHelperFunctions:
         client = TestClient(app, raise_server_exceptions=False)
 
         # Admin should access
-        response = client.get(
-            "/admin-only", headers={"Authorization": "Bearer admin"}
-        )
+        response = client.get("/admin-only", headers={"Authorization": "Bearer admin"})
         assert response.status_code == 200
 
         # Reader should be forbidden
-        response = client.get(
-            "/admin-only", headers={"Authorization": "Bearer reader"}
-        )
+        response = client.get("/admin-only", headers={"Authorization": "Bearer reader"})
         assert response.status_code == 403

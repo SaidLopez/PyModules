@@ -12,8 +12,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pymodules import Event
 
-    from .discovery import DiscoveredEvent
-
 
 class HTTPMethod(str, Enum):
     """HTTP methods for REST endpoints."""
@@ -189,7 +187,7 @@ class RouteConvention:
             for prefix in ["create", "get", "update", "delete", "list", "search"]:
                 if class_name.lower().startswith(prefix):
                     action = prefix
-                    domain = class_name[len(prefix):].lower()
+                    domain = class_name[len(prefix) :].lower()
                     break
 
         domain_plural = self._pluralize(domain)
@@ -290,7 +288,7 @@ class RESTConvention(RouteConvention):
             for prefix in ["create", "get", "update", "delete", "list", "search", "activate"]:
                 if class_name.lower().startswith(prefix):
                     action = prefix
-                    domain = class_name[len(prefix):].lower()
+                    domain = class_name[len(prefix) :].lower()
                     break
             if not domain:
                 domain = class_name.lower()
@@ -332,9 +330,7 @@ class RESTConvention(RouteConvention):
             id_param_name=self._get_id_param_name(domain, event_class),
         )
 
-    def _create_convention_route(
-        self, domain: str, action: str, event_class: type
-    ) -> RouteInfo:
+    def _create_convention_route(self, domain: str, action: str, event_class: type) -> RouteInfo:
         """Create a route using conventions."""
         path = self._build_path(domain, action)
         method = self._get_method(action)

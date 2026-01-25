@@ -355,9 +355,7 @@ class TestFullStackIntegration:
         update_route = next((p for p, m in routes if "user" in p.lower() and "PUT" in m), None)
 
         if update_route and "{" in update_route:
-            response = client.put(
-                update_route.replace("{id}", user_id), json={"name": "Updated"}
-            )
+            response = client.put(update_route.replace("{id}", user_id), json={"name": "Updated"})
             assert response.status_code == 200
             data = response.json()
             assert data["name"] == "Updated"
@@ -422,9 +420,7 @@ class TestFullStackIntegration:
 
         if get_route and "{" in get_route:
             # Try to get non-existent user
-            response = client.get(
-                get_route.replace("{id}", "00000000-0000-0000-0000-000000000000")
-            )
+            response = client.get(get_route.replace("{id}", "00000000-0000-0000-0000-000000000000"))
             assert response.status_code >= 400
 
     @pytest.mark.asyncio
@@ -466,9 +462,7 @@ class TestFullStackIntegration:
 
         if create_route:
             # Without auth
-            response = client.post(
-                create_route, json={"name": "Test", "email": "test@test.com"}
-            )
+            response = client.post(create_route, json={"name": "Test", "email": "test@test.com"})
             assert response.status_code == 401
 
             # With auth

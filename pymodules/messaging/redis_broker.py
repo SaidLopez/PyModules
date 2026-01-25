@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from typing import TYPE_CHECKING, Any
 
 from ..logging import get_logger
 from .broker import (
@@ -302,7 +303,7 @@ class RedisBroker(MessageBroker):
         self._running = True
 
         # Build streams dict for XREADGROUP
-        streams_dict = {stream: ">" for stream in self._subscribed_streams}
+        streams_dict = dict.fromkeys(self._subscribed_streams, ">")
 
         while self._running:
             try:
@@ -338,9 +339,7 @@ class RedisBroker(MessageBroker):
                     self._on_error(e)
                 await asyncio.sleep(1)  # Brief pause before retry
 
-    def _parse_message(
-        self, stream: str, msg_id: str, fields: dict[str, str]
-    ) -> Message:
+    def _parse_message(self, stream: str, msg_id: str, fields: dict[str, str]) -> Message:
         """Parse Redis stream entry into Message."""
         return Message(
             id=fields.get("id", msg_id),
@@ -376,9 +375,7 @@ class RedisBroker(MessageBroker):
                     if idle_time > self.config.ack_timeout * 1000:  # Convert to ms
                         if delivery_count >= self.config.max_retries:
                             # Move to DLQ
-                            logger.warning(
-                                "Message %s exceeded max retries, moving to DLQ", msg_id
-                            )
+                            logger.warning("Message %s exceeded max retries, moving to DLQ", msg_id)
                             await self._move_to_dlq(stream, msg_id)
                         else:
                             # Reclaim and redeliver
@@ -429,9 +426,7 @@ class RedisBroker(MessageBroker):
             return
 
         try:
-            await self._redis.xack(
-                message.stream, self.config.consumer_group, message.id
-            )
+            await self._redis.xack(message.stream, self.config.consumer_group, message.id)
             self._pending.pop(message.id, None)
             logger.debug("Acknowledged message %s", message.id)
         except Exception as e:

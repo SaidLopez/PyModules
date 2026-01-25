@@ -613,6 +613,7 @@ class ModuleHost:
         # Add trace context to headers if tracing enabled
         if self._config.enable_tracing:
             from .tracing import get_current_trace
+
             trace = get_current_trace()
             if trace:
                 message.headers["trace_id"] = trace.trace_id
