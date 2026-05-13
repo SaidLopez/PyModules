@@ -11,8 +11,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .discovery import ServiceRegistry
-    from .messaging import MessageBroker
     from .resilience import CircuitBreaker, DeadLetterQueue, RateLimiter, RetryPolicy
     from .tracing import Tracer
 
@@ -55,12 +53,6 @@ class ModuleHostConfig:
 
     # Tracing
     tracer: "Tracer | None" = None
-
-    # Distributed messaging (optional)
-    message_broker: "MessageBroker | None" = None
-
-    # Service discovery (optional)
-    service_registry: "ServiceRegistry | None" = None
 
     @classmethod
     def from_env(cls) -> "ModuleHostConfig":
@@ -159,40 +151,6 @@ class ModuleHostConfig:
 
             tracer = Tracer()
 
-        # Message broker configuration
-        message_broker = None
-        broker_type = os.getenv("PYMODULES_BROKER_TYPE", "").lower()
-        if broker_type == "redis":
-            redis_url = os.getenv("PYMODULES_REDIS_URL", "redis://localhost:6379/0")
-            try:
-                from .messaging import RedisBroker, RedisBrokerConfig
-
-                broker_config = RedisBrokerConfig.from_env()
-                broker_config.url = redis_url
-                message_broker = RedisBroker(broker_config)
-            except ImportError:
-                pass  # redis not installed
-
-        # Service registry configuration
-        service_registry: ServiceRegistry | None = None
-        discovery_type = os.getenv("PYMODULES_DISCOVERY_TYPE", "").lower()
-        if discovery_type == "dns":
-            try:
-                from .discovery import DNSRegistryConfig, DNSServiceRegistry
-
-                dns_config = DNSRegistryConfig.from_env()
-                service_registry = DNSServiceRegistry(dns_config)
-            except ImportError:
-                pass
-        elif discovery_type == "consul":
-            try:
-                from .discovery import ConsulRegistryConfig, ConsulServiceRegistry
-
-                consul_config = ConsulRegistryConfig.from_env()
-                service_registry = ConsulServiceRegistry(consul_config)
-            except ImportError:
-                pass  # consul not installed
-
         return cls(
             max_workers=max_workers,
             propagate_exceptions=propagate_str == "true",
@@ -204,8 +162,6 @@ class ModuleHostConfig:
             retry_policy=retry_policy,
             dead_letter_queue=dead_letter_queue,
             tracer=tracer,
-            message_broker=message_broker,
-            service_registry=service_registry,
         )
 
 
@@ -223,7 +179,6 @@ class Metrics:
         events_rate_limited: Number of events rejected by rate limiter.
         events_circuit_broken: Number of events rejected by circuit breaker.
         events_dead_lettered: Number of events sent to DLQ.
-        events_published: Number of events published to message broker.
         modules_registered: Current number of registered modules.
     """
 
@@ -235,7 +190,6 @@ class Metrics:
     events_rate_limited: int = 0
     events_circuit_broken: int = 0
     events_dead_lettered: int = 0
-    events_published: int = 0
     modules_registered: int = 0
 
     def to_dict(self) -> dict:
@@ -249,7 +203,6 @@ class Metrics:
             "events_rate_limited": self.events_rate_limited,
             "events_circuit_broken": self.events_circuit_broken,
             "events_dead_lettered": self.events_dead_lettered,
-            "events_published": self.events_published,
             "modules_registered": self.modules_registered,
         }
 
@@ -263,4 +216,3 @@ class Metrics:
         self.events_rate_limited = 0
         self.events_circuit_broken = 0
         self.events_dead_lettered = 0
-        self.events_published = 0
