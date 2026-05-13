@@ -25,19 +25,7 @@ class DiscoveredCommand:
     input_class: type[CommandRequest]
     output_class: type[CommandResponse] | None
     command_name: str = ""
-    domain: str = ""
-    action: str = ""
-    module_path: str = ""
     api_metadata: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def requires_id(self) -> bool:
-        """Check if the input class has an ID field for the primary resource."""
-        if not self.input_class:
-            return False
-        hints = getattr(self.input_class, "__annotations__", {})
-        id_field = f"{self.domain}_id"
-        return id_field in hints or "id" in hints
 
 
 class CommandDiscovery:
@@ -50,7 +38,7 @@ class CommandDiscovery:
         discovery = CommandDiscovery()
         commands = discovery.discover("myapp.commands")
         for cmd in commands:
-            print(f"{cmd.command_name} -> {cmd.domain}.{cmd.action}")
+            print(cmd.command_name)
     """
 
     def __init__(
@@ -120,7 +108,7 @@ class CommandDiscovery:
         """Scan a single module for Command classes."""
         for _name, obj in inspect.getmembers(module, inspect.isclass):
             if self._is_command_class(obj) and obj.__module__ == module.__name__:
-                discovered = self._extract_command_metadata(obj, module.__name__)
+                discovered = self._extract_command_metadata(obj)
                 if discovered:
                     self._discovered.append(discovered)
 
@@ -138,31 +126,13 @@ class CommandDiscovery:
         return True
 
     def _extract_command_metadata(
-        self, command_class: type[Command[Any, Any]], module_path: str
+        self, command_class: type[Command[Any, Any]]
     ) -> DiscoveredCommand | None:
         """Extract metadata from a Command class."""
         if is_excluded_from_api(command_class):
             return None
 
         command_name = getattr(command_class, "name", "") or ""
-
-        # Parse domain and action from command name
-        if command_name and "." in command_name:
-            parts = command_name.split(".", 1)
-            domain = parts[0]
-            action = parts[1] if len(parts) > 1 else ""
-        else:
-            # Fall back to class name parsing
-            class_name = command_class.__name__
-            domain = ""
-            action = ""
-            for prefix in ["create", "get", "update", "delete", "list", "search"]:
-                if class_name.lower().startswith(prefix):
-                    action = prefix
-                    domain = class_name[len(prefix) :].lower()
-                    break
-            if not domain:
-                domain = class_name.lower()
 
         input_class, output_class = self._extract_type_params(command_class)
         if not input_class:
@@ -175,9 +145,6 @@ class CommandDiscovery:
             input_class=input_class,
             output_class=output_class,
             command_name=command_name,
-            domain=domain,
-            action=action,
-            module_path=module_path,
             api_metadata=api_metadata,
         )
 

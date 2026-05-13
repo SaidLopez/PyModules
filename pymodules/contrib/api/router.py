@@ -127,7 +127,7 @@ class ModuleRouter:
             return self
 
         discovery = CommandDiscovery()
-        discovered = discovery._extract_command_metadata(command_class, command_class.__module__)
+        discovered = discovery._extract_command_metadata(command_class)
         if discovered:
             self._register_discovered_command(discovered)
         return self
