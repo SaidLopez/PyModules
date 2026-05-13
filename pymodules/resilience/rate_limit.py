@@ -11,6 +11,7 @@ import threading
 import time
 from typing import Any
 
+from ..exceptions import PyModulesSignal
 from ..interfaces import Command
 from ..logging import get_logger
 from ..middleware import NextCall
@@ -18,8 +19,14 @@ from ..middleware import NextCall
 resilience_logger = get_logger("resilience")
 
 
-class RateLimitExceeded(Exception):
-    """Raised when the rate limit is exceeded and ``block=False``."""
+class RateLimitExceeded(PyModulesSignal):
+    """
+    Raised when the rate limit is exceeded and ``block=False``.
+
+    Subclass of ``PyModulesSignal`` so the host re-raises it as-is regardless
+    of ``propagate_exceptions`` — rate-limit rejection is a framework decision,
+    not a handler error.
+    """
 
     def __init__(self, message: str, retry_after: float = 0):
         super().__init__(message)

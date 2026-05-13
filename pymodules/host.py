@@ -13,8 +13,9 @@ middleware once at construction. ``dispatch_async()`` invokes the chain;
 
 The terminal middleware looks up ``type(command)`` in the dispatch table.
 Sync handlers are bridged to async via the host's ``ThreadPoolExecutor``.
-Unmatched dispatches silently return ``None`` (transitional; a future
-commit will raise ``UnknownCommandError``).
+Unmatched dispatches raise ``UnknownCommandError`` (a ``PyModulesSignal``);
+middleware that wants to observe rather than swallow it should catch and
+re-raise.
 """
 
 import asyncio
@@ -29,28 +30,20 @@ from .exceptions import (
     CommandHandlingError,
     DuplicateCommandError,
     ModuleRegistrationError,
-    PyModulesError,
+    PyModulesSignal,
     SyncDispatchInAsyncContextError,
     SyncDispatchOnAsyncHandlerError,
+    UnknownCommandError,
 )
 from .interfaces import Command, CommandRequest, CommandResponse
 from .logging import configure_logging, host_logger
 from .middleware import Middleware, NextCall
 from .module import HANDLES_ATTR, Module
-from .resilience import CircuitBreakerOpen, RateLimitExceeded
 
 # TypeVars for typed dispatch surface. ``Req``/``Resp`` propagate from the
 # Command's generic parameters through ``dispatch`` to the caller.
 Req = TypeVar("Req", bound=CommandRequest)
 Resp = TypeVar("Resp", bound=CommandResponse)
-
-
-# Sentinel key the terminal middleware writes onto ``command.meta`` to
-# signal "no module claimed this Command class". Observability middleware
-# (``MetricsMiddleware``, ``LifecycleMiddleware``) reads and clears it.
-from .tracing import MetricsMiddleware as _MetricsMiddleware  # noqa: E402
-
-_UNMATCHED_FLAG = _MetricsMiddleware.UNMATCHED_FLAG
 
 
 class ModuleHost:
@@ -119,16 +112,14 @@ class ModuleHost:
 
         Looks up ``type(command)`` in the dispatch table and invokes the
         claiming handler. Sync handlers run on the host's executor.
-        Unmatched types signal via ``command.meta[_UNMATCHED_FLAG]`` and
-        return ``None``.
+        Raises ``UnknownCommandError`` if no Module claims ``type(command)``.
 
         Signature note: the terminal does not take a ``next`` parameter —
         it is the end of the chain. The chain builder adapts it.
         """
         handler = self._dispatch_table.get(type(command))
         if handler is None:
-            command.meta[_UNMATCHED_FLAG] = True
-            return None
+            raise UnknownCommandError(type(command))
 
         module = handler.__self__  # type: ignore[attr-defined]
         host_logger.debug(
@@ -205,7 +196,6 @@ class ModuleHost:
                             "Pass override=True to ModuleHost.register to replace."
                         )
 
-            module._host = self
             self._modules.append(module)
 
             for cmd_class, bound in new_pairs:
@@ -222,7 +212,6 @@ class ModuleHost:
         except DuplicateCommandError:
             if module in self._modules:
                 self._modules.remove(module)
-            module._host = None
             raise
         except Exception as e:
             host_logger.error("Failed to register module %s: %s", type(module).__name__, e)
@@ -233,7 +222,6 @@ class ModuleHost:
                 for k, v in self._dispatch_table.items()
                 if getattr(v, "__self__", None) is not module
             }
-            module._host = None
             raise ModuleRegistrationError(f"Failed to register {type(module).__name__}: {e}") from e
 
         return self
@@ -254,7 +242,6 @@ class ModuleHost:
                 for k, v in self._dispatch_table.items()
                 if getattr(v, "__self__", None) is not module
             }
-            module._host = None
             self._modules.remove(module)
             host_logger.info("Unregistered module: %s", module.metadata.name)
         return self
@@ -279,16 +266,17 @@ class ModuleHost:
         """
         try:
             return await self._chain(command)
+        except PyModulesSignal:
+            # Framework-level signals (rate limit, breaker open, unknown
+            # command, …) always propagate as-is, regardless of
+            # ``propagate_exceptions`` (which controls whether *handler*
+            # exceptions escape).
+            raise
         except CommandHandlingError:
             if self._config.propagate_exceptions:
                 raise
             host_logger.error("Dispatch of %s failed", command.name, exc_info=True)
             return None
-        except (RateLimitExceeded, CircuitBreakerOpen, PyModulesError):
-            # Framework-level signals: always propagate as-is, regardless
-            # of ``propagate_exceptions`` (which controls whether *handler*
-            # exceptions escape).
-            raise
         except Exception as e:
             handler = self._dispatch_table.get(type(command))
             module = handler.__self__ if handler is not None else None  # type: ignore[attr-defined]

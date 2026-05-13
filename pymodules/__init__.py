@@ -22,9 +22,11 @@ from .exceptions import (
     DuplicateCommandError,
     ModuleRegistrationError,
     PyModulesError,
+    PyModulesSignal,
     RepositoryError,
     SyncDispatchInAsyncContextError,
     SyncDispatchOnAsyncHandlerError,
+    UnknownCommandError,
 )
 from .host import ModuleHost
 from .interfaces import Command, CommandRequest, CommandResponse
@@ -82,9 +84,11 @@ __all__ = [
     "NextCall",
     # Exceptions
     "PyModulesError",
+    "PyModulesSignal",
     "CommandHandlingError",
     "ModuleRegistrationError",
     "DuplicateCommandError",
+    "UnknownCommandError",
     "ConfigurationError",
     "DatabaseError",
     "ConnectionError",

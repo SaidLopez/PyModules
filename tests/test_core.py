@@ -13,6 +13,7 @@ from pymodules import (
     DuplicateCommandError,
     Module,
     ModuleHost,
+    UnknownCommandError,
     handles,
     module,
 )
@@ -86,10 +87,6 @@ class TestModuleClass:
         assert mod.metadata.name == "SampleModule"
         assert mod.metadata.description == "A test module"
 
-    def test_module_host_initially_none(self):
-        mod = SampleModule()
-        assert mod.host is None
-
 
 class TestModuleHostClass:
     """Tests for ModuleHost."""
@@ -100,7 +97,6 @@ class TestModuleHostClass:
         host.register(mod)
 
         assert len(host.modules) == 1
-        assert mod.host is host
 
     def test_unregister_module(self):
         host = ModuleHost()
@@ -109,7 +105,6 @@ class TestModuleHostClass:
         host.unregister(mod)
 
         assert len(host.modules) == 0
-        assert mod.host is None
 
     def test_dispatch_command(self):
         host = ModuleHost()
@@ -129,10 +124,10 @@ class TestModuleHostClass:
         host.register(mod)
 
         command = UnhandledCommand(request=SampleInput(value="test"))
-        response = host.dispatch(command)
+        with pytest.raises(UnknownCommandError) as exc_info:
+            host.dispatch(command)
 
-        # Unmatched dispatch silently returns None (transitional; raises in 1.0).
-        assert response is None
+        assert exc_info.value.command_type is UnhandledCommand
 
     def test_host_can_handle_reflects_dispatch_table(self):
         """host.can_handle returns True for claimed Command classes."""
@@ -208,18 +203,14 @@ class TestDuplicateClaimGuard:
         # Re-registering a new instance must not raise.
         host.register(SampleModule())
 
-    def test_module_can_dispatch_to_host(self):
-        """Modules can dispatch commands through their host."""
+    def test_module_has_no_host_backpointer(self):
+        """Modules don't carry a reference to their host (intentional)."""
         host = ModuleHost()
         mod = SampleModule()
         host.register(mod)
 
-        # Simulate a module dispatching a command
-        command = SampleCommand(request=SampleInput(value="from-module"))
-        response = mod.host.dispatch(command)
-
-        assert isinstance(response, SampleOutput)
-        assert response.result == "processed: from-module"
+        assert not hasattr(mod, "host")
+        assert not hasattr(mod, "_host")
 
 
 @pytest.mark.asyncio

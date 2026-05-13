@@ -17,6 +17,7 @@ from enum import Enum
 from functools import wraps
 from typing import Any
 
+from ..exceptions import PyModulesSignal
 from ..interfaces import Command
 from ..logging import get_logger
 from ..middleware import NextCall
@@ -32,8 +33,14 @@ class CircuitState(Enum):
     HALF_OPEN = "half_open"  # Testing if service recovered
 
 
-class CircuitBreakerOpen(Exception):
-    """Raised when the circuit breaker is open."""
+class CircuitBreakerOpen(PyModulesSignal):
+    """
+    Raised when the circuit breaker is open.
+
+    Subclass of ``PyModulesSignal`` so the host re-raises it as-is regardless
+    of ``propagate_exceptions`` — breaker rejection is a framework decision,
+    not a handler error.
+    """
 
     pass
 

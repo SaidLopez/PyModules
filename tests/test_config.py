@@ -16,6 +16,7 @@ from pymodules import (
     Module,
     ModuleHost,
     ModuleHostConfig,
+    UnknownCommandError,
     handles,
     module,
 )
@@ -132,11 +133,13 @@ class TestMetricsMiddleware:
         host = ModuleHost(config=ModuleHostConfig(middleware=[mw]))
         # No module registered.
 
-        host.dispatch(ConfigCommand(request=ConfigInput(value="test")))
+        with pytest.raises(UnknownCommandError):
+            host.dispatch(ConfigCommand(request=ConfigInput(value="test")))
 
         assert mw.dispatched == 1
         assert mw.succeeded == 0
         assert mw.unmatched == 1
+        assert mw.failed == 0
 
 
 class TestLifecycleMiddleware:

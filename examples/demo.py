@@ -52,17 +52,14 @@ def main():
     )
     host.dispatch(log)
 
-    # Example 4: Module dispatching commands to other modules
-    print("\n--- Example 4: Module-to-Module Communication ---")
-    print("(The GreeterModule could log via LoggingCommand through host)")
+    # Example 4: Caller-orchestrated fan-out
+    print("\n--- Example 4: Caller-Orchestrated Fan-Out ---")
+    print("(Cross-Module workflows are composed by the caller, not by handlers)")
 
-    # Show that modules can access the host
-    greeter = host.get_module_by_name("Greeter")
-    if greeter and greeter.host:
-        log_cmd = LoggingCommand(
-            request=LoggingInput(level=LogLevel.DEBUG, message="Greeter module is active")
-        )
-        greeter.host.dispatch(log_cmd)
+    log_cmd = LoggingCommand(
+        request=LoggingInput(level=LogLevel.DEBUG, message="Greeter module is active")
+    )
+    host.dispatch(log_cmd)
 
     # Example 5: Calculator
     print("\n--- Example 5: Calculator ---")

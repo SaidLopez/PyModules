@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from .exceptions import UnknownCommandError
 from .logging import get_logger
 from .middleware import NextCall
 
@@ -306,19 +307,16 @@ class MetricsMiddleware:
     Counts dispatched / succeeded / failed / unmatched commands.
 
     Owns its counters directly; user code holds a reference to read them.
-    The terminal middleware signals unmatched dispatches by setting
-    ``command.meta["_pymodules_unmatched"] = True`` immediately before
-    returning ``None``; this middleware uses that flag rather than
-    introspecting the dispatch table.
+    Unmatched dispatches surface as ``UnknownCommandError`` from the terminal;
+    this middleware catches and re-raises it so the count is recorded without
+    consuming the signal.
 
     Attributes:
         dispatched: Total commands seen by the middleware.
         succeeded: Commands that returned without raising and were handled.
-        failed: Commands whose inner chain raised.
+        failed: Commands whose inner chain raised (excluding unmatched).
         unmatched: Dispatches where no module claimed the Command class.
     """
-
-    UNMATCHED_FLAG = "_pymodules_unmatched"
 
     def __init__(self) -> None:
         self.dispatched = 0
@@ -330,14 +328,14 @@ class MetricsMiddleware:
         self.dispatched += 1
         try:
             result = await next_call(command)
+        except UnknownCommandError:
+            self.unmatched += 1
+            raise
         except Exception:
             self.failed += 1
             raise
 
-        if command.meta.pop(self.UNMATCHED_FLAG, False):
-            self.unmatched += 1
-        else:
-            self.succeeded += 1
+        self.succeeded += 1
         return result
 
 
@@ -375,6 +373,15 @@ class LifecycleMiddleware:
 
         try:
             result = await next_call(command)
+        except UnknownCommandError as e:
+            # Unmatched dispatch: not a handler error — call on_end with
+            # was_handled=False, but skip on_error since no Module ran.
+            if self.on_end is not None:
+                try:
+                    self.on_end(command, False)
+                except Exception as cb_e:
+                    tracing_logger.warning("on_end callback failed: %s", cb_e)
+            raise
         except Exception as e:
             if self.on_error is not None:
                 try:
@@ -388,10 +395,9 @@ class LifecycleMiddleware:
                     tracing_logger.warning("on_end callback failed: %s", cb_e)
             raise
 
-        was_handled = not command.meta.get(MetricsMiddleware.UNMATCHED_FLAG, False)
         if self.on_end is not None:
             try:
-                self.on_end(command, was_handled)
+                self.on_end(command, True)
             except Exception as cb_e:
                 tracing_logger.warning("on_end callback failed: %s", cb_e)
         return result

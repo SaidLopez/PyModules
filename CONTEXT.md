@@ -4,9 +4,11 @@ A small in-process **command-dispatch** core for Python, with optional contrib p
 
 ## Project identity
 
-**Core** is small and opinionated: registration, dispatch, can_handle/handle resolution, and a single winning handler per call. Everything else (REST router, DB repository, message broker, service discovery, persistent DLQ, JWT auth) is **contrib** — optional, swappable, separately import-gated.
+**Core** is the dispatch primitive plus the `Middleware` contract and the small set of in-process middlewares that ship by default. Concretely: registration, type-routed dispatch with a single winning handler per call, the `(command, next) -> response` chain, and the resilience/observability middlewares that depend only on the standard library (rate limit, circuit breaker, retry, in-memory DLQ, fallback, metrics, tracing, lifecycle).
 
-A user who wants only the dispatch core must not be forced to reason about Redis, Consul, or SQLAlchemy.
+**Contrib** is anything that crosses a process boundary or pulls an external dependency: REST router (FastAPI), DB repository (SQLAlchemy), message broker (Redis/Kafka), service discovery (Consul/DNS), persistent DLQ, OTel exporter, JWT auth. Each is optional, swappable, and gated behind an install extra.
+
+A user who wants only the dispatch core must not be forced to reason about Redis, Consul, or SQLAlchemy — but they get the in-process middleware set without an extra, because the `Middleware` contract is what the core *is*, and shipping zero default middleware would force every user to reinvent retry/metrics/correlation-IDs.
 
 ## Language
 
@@ -53,12 +55,13 @@ The act of sending an Event to the external message broker. Distinct from dispat
 - Routing is type-only. There is no `can_handle` predicate. Conditional handling is expressed by splitting the **Command** into narrower classes or branching inside the handler body.
 - A **Command** is dispatched to exactly one **Module**; an **Event** is published to zero or more subscribers.
 - Dispatch is in-process; Publish crosses the process boundary via a broker. The **ModuleHost** does not publish — `Module` code calls a broker directly.
+- A **Module** holds no back-reference to its **ModuleHost**. Inside a handler, a Module does not re-enter dispatch. Cross-Module fan-out is either (a) caller-orchestrated — the caller dispatches command 1, inspects the response, dispatches command 2 — or (b) broadcast via **Event** publish to a broker. Re-entering the middleware chain from within a handler would double-charge rate-limit tokens, re-arm retries, and hide the call graph from the configured chain; it is intentionally not supported.
 
 ## Layout
 
-- `pymodules.{host,module,interfaces,config,resilience,tracing,logging,exceptions,protocols}` — **core**, no optional deps.
-- `pymodules.contrib.{api,db,messaging,discovery,health,auth}` — **contrib**, each gated behind an extra.
-- The legacy `pymodules.fastapi` is scheduled for removal; it lives only as a deprecation shim until then.
+- `pymodules.{host,module,interfaces,middleware,config,exceptions,logging}` — **dispatch core**, ~900 LOC, standard library only.
+- `pymodules.{resilience,tracing}` — **default in-process middlewares**, ~1,200 LOC, standard library only. Re-exported from the top-level `pymodules` namespace for ergonomics.
+- `pymodules.contrib.{api,db,messaging,discovery,health,auth,tracing}` — **contrib**, each gated behind an install extra; pulls third-party deps (FastAPI, SQLAlchemy, Redis, Consul, OpenTelemetry, …).
 
 ## Example dialogue
 
@@ -76,3 +79,4 @@ The act of sending an Event to the external message broker. Distinct from dispat
 - **Auto-generated REST routing from class names.** Class names are an internal concern; URLs are an external contract. REST endpoints are declared explicitly via `@api_endpoint(method=..., path=...)` on each **Command**. The contrib API layer does no convention magic.
 - **Implicit sync↔async bridging.** Sync `dispatch()` will not silently run an async handler under `asyncio.run()`; it raises.
 - **Broker-aware host.** A **ModuleHost** never publishes to an external broker. Modules that need to publish hold their own broker reference.
+- **In-handler dispatch back to the host.** A **Module** has no `host` back-pointer. Handlers do not call `self.host.dispatch(OtherCommand)` — re-entering the middleware chain from within a handler would double-charge rate-limit tokens, re-arm retries, and hide the call graph. Fan-out is caller-orchestrated or broker-mediated.

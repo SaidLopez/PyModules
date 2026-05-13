@@ -16,13 +16,9 @@ Handlers **return** their typed CommandResponse. The host's
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 from .interfaces import Command, CommandResponse
-
-if TYPE_CHECKING:
-    from .host import ModuleHost
-
 
 # TypeVar bound to the response type of the Command class passed to ``@handles``.
 # Used so that mypy can verify the decorated method's return type matches the
@@ -114,9 +110,15 @@ class Module:
 
     Subclass this and decorate methods with ``@handles(CommandClass)`` to
     claim Commands. Each decorated method takes the typed Command and
-    **returns** the typed CommandResponse. Each module has access to its
-    host via the ``host`` property, allowing it to dispatch commands to
-    other modules.
+    **returns** the typed CommandResponse.
+
+    A Module has **no reference back to its ``ModuleHost``**. Fan-out is
+    expressed by publishing an ``Event`` to a broker (the Module holds the
+    broker directly); cross-Module orchestration is the caller's job —
+    dispatch one Command, inspect the response, dispatch the next. Calling
+    back into the host from inside a handler would re-enter the middleware
+    chain (re-charging rate-limit tokens, re-arming retries, hiding the
+    call graph) and is intentionally not supported.
 
     Example:
         @module(name="Greeter", description="Handles greeting commands")
@@ -129,15 +131,9 @@ class Module:
     _module_metadata: ModuleMetadata = ModuleMetadata()
 
     def __init__(self) -> None:
-        self._host: ModuleHost | None = None
         # Initialize metadata from class if not set by decorator
         if not hasattr(self.__class__, "_module_metadata"):
             self.__class__._module_metadata = ModuleMetadata(name=self.__class__.__name__)
-
-    @property
-    def host(self) -> Optional["ModuleHost"]:
-        """The ModuleHost this module is registered with."""
-        return self._host
 
     @property
     def metadata(self) -> ModuleMetadata:

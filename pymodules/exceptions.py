@@ -17,6 +17,39 @@ class PyModulesError(Exception):
     pass
 
 
+class PyModulesSignal(PyModulesError):
+    """
+    Marker for framework-level exceptions that must propagate as-is.
+
+    The host's outermost wrapper catches ``PyModulesSignal`` and re-raises it
+    untouched, regardless of ``ModuleHostConfig.propagate_exceptions`` (which
+    governs whether *handler* errors escape). Subclass this for any control-flow
+    signal middleware needs to surface above the dispatch policy — e.g.
+    ``RateLimitExceeded``, ``CircuitBreakerOpen``, ``UnknownCommandError``.
+    """
+
+    pass
+
+
+class UnknownCommandError(PyModulesSignal):
+    """
+    Raised by the terminal middleware when no registered Module claims
+    ``type(command)``.
+
+    Attributes:
+        command_type: The unmatched ``Command`` subclass.
+    """
+
+    def __init__(self, command_type: type):
+        super().__init__(
+            f"No module claims {command_type.__name__}; "
+            "register a Module with @handles({}) or remove the dispatch.".format(
+                command_type.__name__
+            )
+        )
+        self.command_type = command_type
+
+
 class CommandHandlingError(PyModulesError):
     """
     Raised when an error occurs during command handling.

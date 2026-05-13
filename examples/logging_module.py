@@ -52,18 +52,18 @@ class LoggingModule(Module):
     """
     A module that handles logging commands and outputs to console.
 
-    This demonstrates the "deferred responsibility" pattern:
-    other modules can dispatch LoggingCommands without knowing
-    how or where the logs will be written.
+    Cross-cutting concerns like logging are orchestrated by the caller:
+    dispatch the primary command, then dispatch a LoggingCommand for the
+    audit line. Modules do not call back into the host from inside their
+    handlers — that would re-enter the middleware chain.
 
-    Example:
-        # In any other module's handle() method:
-        log_command = LoggingCommand(request=LoggingInput(
+    Example (in caller code, not inside a handler):
+        host.dispatch(SomeCommand(...))
+        host.dispatch(LoggingCommand(request=LoggingInput(
             level=LogLevel.INFO,
             message="User {} logged in",
-            args=["john"]
-        ))
-        self.host.dispatch(log_command)
+            args=["john"],
+        )))
     """
 
     def __init__(self, output=None):
