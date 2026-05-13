@@ -1,6 +1,6 @@
 # PyModules
 
-A small in-process **command-dispatch** core for Python, with optional contrib packages for transport, persistence, discovery, and observability. Inspired by NetModules, but explicit about being command-shaped rather than event-shaped.
+A small in-process **command-dispatch** core for Python with an in-process **event bus** for fan-out, plus optional contrib packages for transport, persistence, discovery, and observability. Inspired by NetModules, but explicit about being command-shaped rather than event-shaped at the dispatch layer.
 
 ## Project identity
 
@@ -41,36 +41,45 @@ The act of running a **Command** through the host's middleware chain to the clai
 _Avoid_: Handle (overloaded with the module method), send, emit.
 
 **Event** (distinct from Command):
-A fire-and-forget broadcast notification published to an external broker. Has no return payload and no winning handler — N subscribers may receive it.
+A fire-and-forget broadcast notification. Has no return payload and no winning handler — N subscribers may receive it. Two transports: the in-process **EventBus** (core) for same-process listeners, and an external broker (contrib `messaging`) when listeners live in another process. The same `Event` subclass is used in both cases; the transport is the orthogonal axis.
 _Avoid_: Command, message (when ambiguous).
 
+**EventBus**:
+The in-process pub/sub registry owned by **ModuleHost**. Maps `type(event) → list[subscriber]` for O(1) routing on `publish`. Errors raised by one subscriber are logged and isolated — other subscribers still receive the event. Has no middleware chain (fire-and-forget; see ADR-0007).
+_Avoid_: Broker (overloaded with the cross-process case), dispatcher (overloaded with ModuleHost).
+
+**Subscribe**:
+The act of registering a callable to receive instances of a given **Event** subclass. Expressed either via `@subscribes(EventClass)` on a Module method (auto-wired at `host.register(module)`) or by calling `host.event_bus.subscribe(EventClass, handler)` directly. Routing is exact-type: a subscriber to a base class does not receive a derived event.
+_Avoid_: Listen-to, observe (when ambiguous).
+
 **Publish**:
-The act of sending an Event to the external message broker. Distinct from dispatch.
+The act of sending an **Event** to subscribers. In-process: `host.publish(event)` (sync) or `host.publish_async(event)` (async) routes through the **EventBus**. Cross-process: a Module holds its own broker reference and calls the broker directly. Distinct from **dispatch**.
 
 ## Relationships
 
-- A **ModuleHost** owns zero or more **Modules** and an ordered list of **Middleware**.
+- A **ModuleHost** owns zero or more **Modules**, an ordered list of **Middleware**, and one in-process **EventBus**.
 - A **Module** declares the **Commands** it handles by decorating methods with `@handles(CommandClass)` (one method per **Command**); the host scans the class at registration and builds an O(1) `{CommandClass → bound method}` dispatch table.
-- At most one **Module** may claim any given **Command** class. Registering a second module that claims the same class raises unless `override=True` is passed.
-- Routing is type-only. There is no `can_handle` predicate. Conditional handling is expressed by splitting the **Command** into narrower classes or branching inside the handler body.
-- A **Command** is dispatched to exactly one **Module**; an **Event** is published to zero or more subscribers.
-- Dispatch is in-process; Publish crosses the process boundary via a broker. The **ModuleHost** does not publish — `Module` code calls a broker directly.
-- A **Module** holds no back-reference to its **ModuleHost**. Inside a handler, a Module does not re-enter dispatch. Cross-Module fan-out is either (a) caller-orchestrated — the caller dispatches command 1, inspects the response, dispatches command 2 — or (b) broadcast via **Event** publish to a broker. Re-entering the middleware chain from within a handler would double-charge rate-limit tokens, re-arm retries, and hide the call graph from the configured chain; it is intentionally not supported.
+- A **Module** declares the **Events** it subscribes to by decorating methods with `@subscribes(EventClass)`; the host wires those methods onto its **EventBus** at registration. A Module may have any mix of `@handles` and `@subscribes` methods.
+- At most one **Module** may claim any given **Command** class. Registering a second module that claims the same class raises unless `override=True` is passed. **No such restriction applies to Events**: multiple Modules may subscribe to the same `EventClass`, which is the whole point of pub/sub fan-out.
+- Routing is type-only — for both **Commands** and **Events**. There is no `can_handle` / `can_subscribe` predicate, and Event routing does not walk the inheritance chain.
+- A **Command** is dispatched to exactly one **Module** and returns a response; an **Event** is published to zero or more subscribers and returns nothing.
+- In-process delivery: **dispatch** runs the **Command** through the middleware chain; **publish** runs the **Event** through the **EventBus** (no middleware chain, errors isolated per subscriber). Cross-process publish remains broker-owned and Module-owned — `ModuleHost` itself never crosses a process boundary.
+- A **Module** holds no back-reference to its **ModuleHost**. Inside a handler, a Module does not re-enter dispatch. Cross-Module fan-out is either (a) caller-orchestrated — the caller dispatches command 1, inspects the response, dispatches command 2 — or (b) broadcast via **Event** publish (in-process via the **EventBus**, or out-of-process via a broker held by the Module). Re-entering the middleware chain from within a handler would double-charge rate-limit tokens, re-arm retries, and hide the call graph from the configured chain; it is intentionally not supported. Publishing an **Event** is permitted because it does not re-enter the middleware chain.
 
 ## Layout
 
-- `pymodules.{host,module,interfaces,middleware,config,exceptions,logging}` — **dispatch core**, ~900 LOC, standard library only.
+- `pymodules.{host,module,interfaces,middleware,eventbus,config,exceptions,logging}` — **dispatch core + in-process EventBus**, ~1,000 LOC, standard library only.
 - `pymodules.{resilience,tracing}` — **default in-process middlewares**, ~1,200 LOC, standard library only. Re-exported from the top-level `pymodules` namespace for ergonomics.
-- `pymodules.contrib.{api,db,messaging,discovery,health,auth,tracing}` — **contrib**, each gated behind an install extra; pulls third-party deps (FastAPI, SQLAlchemy, Redis, Consul, OpenTelemetry, …).
+- `pymodules.contrib.{api,db,messaging,discovery,health,auth,tracing}` — **contrib**, each gated behind an install extra; pulls third-party deps (FastAPI, SQLAlchemy, Redis, Consul, OpenTelemetry, …). The `messaging` package is the **cross-process** Event transport; the in-process EventBus in core does not depend on it.
 
 ## Example dialogue
 
 > **Dev:** "If I want `CreateUser` to also notify the audit log, do I register two modules with `can_handle(CreateUser)`?"
-> **Maintainer:** "No — `CreateUser` is a **Command**; only one Module wins. Have the user-creation Module **publish** a `UserCreated` **Event** after it succeeds. The audit log subscribes to that Event."
+> **Maintainer:** "No — `CreateUser` is a **Command**; only one Module wins. Have the user-creation Module **publish** a `UserCreated` **Event** after it succeeds — `host.publish(UserCreated(...))`. The audit log subscribes to that Event with `@subscribes(UserCreated)`. Everything stays in-process via the **EventBus**; if you later need an audit listener in another process, the same `UserCreated` dataclass is published over the contrib broker."
 
 ## Flagged ambiguities
 
-- "Event" historically referred to the in-process command. Resolved: the in-process primitive is a **Command**; "Event" is reserved for cross-process broadcast notifications.
+- "Event" historically referred to the in-process command. Resolved (ADR-0001): the in-process *dispatch* primitive is a **Command**. Subsequently (ADR-0007) "Event" was promoted to a first-class core primitive *for pub/sub*, distinct from Command — with an in-process **EventBus** transport in core and an optional broker transport in contrib. "Event" therefore now names a broadcast notification of either transport; the *dispatch* primitive remains **Command**, exclusively.
 - "handle" is overloaded between `Module.handle(command)` and the host's old `host.handle(event)` method. Resolved: host method renamed to `dispatch`; `Module.handle` keeps its name as the per-module callback.
 - "output" was a mutable field on the in-process command. Resolved: handlers **return** their response; **Command** carries only the request payload and metadata.
 
@@ -78,5 +87,5 @@ The act of sending an Event to the external message broker. Distinct from dispat
 
 - **Auto-generated REST routing from class names.** Class names are an internal concern; URLs are an external contract. REST endpoints are declared explicitly via `@api_endpoint(method=..., path=...)` on each **Command**. The contrib API layer does no convention magic.
 - **Implicit sync↔async bridging.** Sync `dispatch()` will not silently run an async handler under `asyncio.run()`; it raises.
-- **Broker-aware host.** A **ModuleHost** never publishes to an external broker. Modules that need to publish hold their own broker reference.
+- **Broker-aware host.** A **ModuleHost** never publishes to an external **broker**. Modules that need cross-process publish hold their own broker reference. The host does own an in-process **EventBus** (no transport, no serialisation, no persistence) — that is a fan-out registry, not a broker.
 - **In-handler dispatch back to the host.** A **Module** has no `host` back-pointer. Handlers do not call `self.host.dispatch(OtherCommand)` — re-entering the middleware chain from within a handler would double-charge rate-limit tokens, re-arm retries, and hide the call graph. Fan-out is caller-orchestrated or broker-mediated.

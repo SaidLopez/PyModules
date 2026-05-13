@@ -88,3 +88,4 @@ def get_logger(name: str) -> logging.Logger:
 host_logger = get_logger("host")
 module_logger = get_logger("module")
 fastapi_logger = get_logger("fastapi")
+eventbus_logger = get_logger("eventbus")

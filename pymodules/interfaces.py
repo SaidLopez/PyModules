@@ -97,3 +97,45 @@ class Command(Generic[Req, Resp]):
             class_name = self.__class__.name
             if isinstance(class_name, str) and class_name:
                 object.__setattr__(self, "name", class_name)
+
+
+@dataclass
+class Event:
+    """
+    Base class for an in-process broadcast notification.
+
+    Unlike a ``Command``, an ``Event`` is fire-and-forget: it has no winning
+    handler, no response value, and may be received by zero or more
+    subscribers. Subclasses add their payload fields directly — there is no
+    separate ``EventRequest``/``EventResponse`` typing because there is
+    nothing to return.
+
+    Events flow through an ``EventBus`` (in-process) rather than through the
+    ``ModuleHost`` dispatch chain. ``Command`` and ``Event`` are deliberately
+    separate primitives: ``Command`` = exactly one winner, returns a value,
+    runs through the middleware chain. ``Event`` = N subscribers, no return,
+    no middleware chain (errors are isolated per subscriber).
+
+    Attributes:
+        name: Logical event name, useful for logging/observability. May be
+            set as a class attribute on the subclass.
+        meta: Free-form metadata dictionary, mirroring ``Command.meta``.
+            Will migrate to ``CommandContext`` once that primitive lands.
+
+    Example:
+        @dataclass
+        class UserCreated(Event):
+            user_id: str = ""
+            email: str = ""
+            name: str = "user.created"
+    """
+
+    name: str = ""
+    meta: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # Allow subclasses to define name as a class attribute, mirroring Command.
+        if not self.name and hasattr(self.__class__, "name"):
+            class_name = self.__class__.name
+            if isinstance(class_name, str) and class_name:
+                object.__setattr__(self, "name", class_name)

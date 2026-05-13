@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, TypeVar
 
 from .config import ModuleHostConfig
+from .eventbus import EventBus
 from .exceptions import (
     CommandHandlingError,
     DuplicateCommandError,
@@ -35,10 +36,10 @@ from .exceptions import (
     SyncDispatchOnAsyncHandlerError,
     UnknownCommandError,
 )
-from .interfaces import Command, CommandRequest, CommandResponse
+from .interfaces import Command, CommandRequest, CommandResponse, Event
 from .logging import configure_logging, host_logger
 from .middleware import Middleware, NextCall
-from .module import HANDLES_ATTR, Module
+from .module import HANDLES_ATTR, SUBSCRIBES_ATTR, Module
 
 # TypeVars for typed dispatch surface. ``Req``/``Resp`` propagate from the
 # Command's generic parameters through ``dispatch`` to the caller.
@@ -71,6 +72,12 @@ class ModuleHost:
         self._modules: list[Module] = []
         # type-routed dispatch table: Command class -> bound handler method
         self._dispatch_table: dict[type, Callable[[Command[Any, Any]], Any]] = {}
+        # In-process EventBus owned by the host. Same lifetime as the host;
+        # ``@subscribes`` methods on registered Modules are auto-wired here.
+        # ``ModuleHost`` does not publish on the Module's behalf — Modules
+        # call ``host.publish(SomeEvent(...))`` (or hold a reference to the
+        # bus directly) when they want fan-out.
+        self._event_bus = EventBus()
         self._executor = ThreadPoolExecutor(max_workers=self._config.max_workers)
         self._start_time = time.time()
 
@@ -96,6 +103,18 @@ class ModuleHost:
     def modules(self) -> list[Module]:
         """List of registered modules."""
         return self._modules.copy()
+
+    @property
+    def event_bus(self) -> EventBus:
+        """
+        The in-process ``EventBus`` owned by this host.
+
+        ``@subscribes``-decorated methods on registered Modules are
+        automatically wired here at registration time. Code that wants to
+        subscribe a free function or to publish events directly can use
+        ``host.event_bus.subscribe(...)`` / ``host.publish(...)``.
+        """
+        return self._event_bus
 
     @property
     def uptime_seconds(self) -> float:
@@ -177,10 +196,31 @@ class ModuleHost:
                 pairs.append((cmd_class, bound))
         return pairs
 
+    def _collect_subscribers(
+        self, module: Module
+    ) -> list[tuple[type[Event], Callable[[Event], Any]]]:
+        """Scan ``module``'s class for ``@subscribes``-decorated methods."""
+        pairs: list[tuple[type[Event], Callable[[Event], Any]]] = []
+        for name, member in inspect.getmembers(type(module), predicate=inspect.isfunction):
+            claims = getattr(member, SUBSCRIBES_ATTR, None)
+            if not claims:
+                continue
+            bound = getattr(module, name)
+            for event_class in claims:
+                pairs.append((event_class, bound))
+        return pairs
+
     def register(self, module: Module, override: bool = False) -> "ModuleHost":
-        """Register a module and add its ``@handles`` claims to the dispatch table."""
+        """Register a module and wire its ``@handles`` / ``@subscribes`` claims.
+
+        ``@handles`` claims become entries in the type-routed dispatch
+        table. ``@subscribes`` claims are registered against the host's
+        ``EventBus``. Both are scanned in one pass; on registration
+        failure all of this module's entries are rolled back.
+        """
         try:
             new_pairs = self._collect_handlers(module)
+            new_subscriptions = self._collect_subscribers(module)
 
             if not override:
                 for cmd_class, _ in new_pairs:
@@ -201,13 +241,21 @@ class ModuleHost:
             for cmd_class, bound in new_pairs:
                 self._dispatch_table[cmd_class] = bound
 
+            for event_class, bound_sub in new_subscriptions:
+                # Multiple Modules may subscribe to the same Event class —
+                # that is the whole point of pub/sub fan-out. No override
+                # / collision check here.
+                self._event_bus.subscribe(event_class, bound_sub)
+
             module.on_load()
 
             host_logger.info(
-                "Registered module: %s (v%s) claiming %d command type(s)",
+                "Registered module: %s (v%s) claiming %d command type(s), "
+                "%d event subscription(s)",
                 module.metadata.name,
                 module.metadata.version,
                 len(new_pairs),
+                len(new_subscriptions),
             )
         except DuplicateCommandError:
             if module in self._modules:
@@ -222,12 +270,18 @@ class ModuleHost:
                 for k, v in self._dispatch_table.items()
                 if getattr(v, "__self__", None) is not module
             }
+            self._unsubscribe_module(module)
             raise ModuleRegistrationError(f"Failed to register {type(module).__name__}: {e}") from e
 
         return self
 
+    def _unsubscribe_module(self, module: Module) -> None:
+        """Remove every EventBus subscription whose handler is bound to ``module``."""
+        for event_class, bound in self._collect_subscribers(module):
+            self._event_bus.unsubscribe(event_class, bound)
+
     def unregister(self, module: Module) -> "ModuleHost":
-        """Unregister a module and remove its dispatch table entries."""
+        """Unregister a module and remove its dispatch + subscription entries."""
         if module in self._modules:
             try:
                 module.on_unload()
@@ -242,6 +296,7 @@ class ModuleHost:
                 for k, v in self._dispatch_table.items()
                 if getattr(v, "__self__", None) is not module
             }
+            self._unsubscribe_module(module)
             self._modules.remove(module)
             host_logger.info("Unregistered module: %s", module.metadata.name)
         return self
@@ -341,6 +396,35 @@ class ModuleHost:
         return await self._invoke_chain(command)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
+    # Event publishing
+    # ------------------------------------------------------------------
+
+    def publish(self, event: Event) -> None:
+        """
+        Publish ``event`` to every in-process subscriber, synchronously.
+
+        Thin facade over ``self.event_bus.publish``. Modules call this
+        explicitly inside a handler (or from any other in-process site);
+        the framework never auto-publishes after a Command succeeds.
+
+        Subscriber exceptions are isolated — a raise in one subscriber is
+        logged and swallowed; other subscribers still receive the event.
+        This is in-process delivery only; cross-process broadcast remains
+        a Module-owned broker concern.
+        """
+        self._event_bus.publish(event)
+
+    async def publish_async(self, event: Event) -> None:
+        """
+        Publish ``event`` to every in-process subscriber, awaiting async ones.
+
+        Thin facade over ``self.event_bus.publish_async``. Use this from
+        inside ``async def`` handlers so async subscribers' coroutines
+        are awaited on the calling loop.
+        """
+        await self._event_bus.publish_async(event)
+
+    # ------------------------------------------------------------------
     # Module lookup
     # ------------------------------------------------------------------
 
@@ -363,6 +447,9 @@ class ModuleHost:
         host_logger.info("Shutting down ModuleHost")
         for module in self._modules.copy():
             self.unregister(module)
+        # Drop any free-function subscriptions that bypassed the @subscribes
+        # path; unregister() above only removes Module-bound handlers.
+        self._event_bus.clear()
         self._executor.shutdown(wait=wait)
         host_logger.debug("ModuleHost shutdown complete")
 

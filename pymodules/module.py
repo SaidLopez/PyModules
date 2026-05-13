@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
-from .interfaces import Command, CommandResponse
+from .interfaces import Command, CommandResponse, Event
 
 # TypeVar bound to the response type of the Command class passed to ``@handles``.
 # Used so that mypy can verify the decorated method's return type matches the
@@ -27,10 +27,13 @@ from .interfaces import Command, CommandResponse
 Resp = TypeVar("Resp", bound=CommandResponse)
 F = TypeVar("F", bound=Callable[..., Any])
 
-
 # Marker attribute name written onto decorated methods by ``@handles``.
 # Read by ``ModuleHost.register`` when building the dispatch table.
 HANDLES_ATTR = "__pymodules_handles__"
+
+# Marker attribute name written onto decorated methods by ``@subscribes``.
+# Read by ``ModuleHost.register`` when wiring the EventBus.
+SUBSCRIBES_ATTR = "__pymodules_subscribes__"
 
 
 def handles(
@@ -70,6 +73,52 @@ def handles(
 
     def decorator(func: Callable[..., Resp]) -> Callable[..., Resp]:
         setattr(func, HANDLES_ATTR, tuple(commands))
+        return func
+
+    return decorator
+
+
+def subscribes(
+    *events: "type[Event]",
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """
+    Decorator marking a Module method as a subscriber for one or more Event classes.
+
+    Sibling of ``@handles``. ``@handles`` claims a Command (one-winner,
+    returns a response, runs through the middleware chain); ``@subscribes``
+    listens for an Event (N-subscribers, no return, no middleware chain,
+    errors are isolated per subscriber).
+
+    The decorator stores the claimed Event classes as a tuple on the
+    function under ``__pymodules_subscribes__``. ``ModuleHost.register``
+    reads that marker and registers the bound method against the
+    host-owned ``EventBus``.
+
+    The decorated method takes ``(self, event: EventClass)`` and returns
+    nothing (or an awaitable of nothing). Both sync and async subscribers
+    are supported.
+
+    A Module may have any mix of ``@handles`` and ``@subscribes`` methods.
+    Unlike ``@handles``, multiple Modules may subscribe to the same Event
+    class — that is the whole point of pub/sub fan-out.
+
+    Example:
+        class AuditModule(Module):
+            @subscribes(UserCreated)
+            def log_user_created(self, event: UserCreated) -> None:
+                self.audit_log.append((event.user_id, event.name))
+    """
+    if not events:
+        raise TypeError("@subscribes requires at least one Event class")
+
+    for event_cls in events:
+        if not isinstance(event_cls, type) or not issubclass(event_cls, Event):
+            raise TypeError(
+                f"@subscribes arguments must be Event subclasses; got {event_cls!r}"
+            )
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        setattr(func, SUBSCRIBES_ATTR, tuple(events))
         return func
 
     return decorator
@@ -151,8 +200,10 @@ class Module:
 
 __all__ = [
     "HANDLES_ATTR",
+    "SUBSCRIBES_ATTR",
     "Module",
     "ModuleMetadata",
     "handles",
     "module",
+    "subscribes",
 ]

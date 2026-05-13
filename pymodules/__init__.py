@@ -14,6 +14,7 @@ Subpackages:
 """
 
 from .config import ModuleHostConfig
+from .eventbus import EventBus, EventHandler
 from .exceptions import (
     CommandHandlingError,
     ConfigurationError,
@@ -29,10 +30,10 @@ from .exceptions import (
     UnknownCommandError,
 )
 from .host import ModuleHost
-from .interfaces import Command, CommandRequest, CommandResponse
+from .interfaces import Command, CommandRequest, CommandResponse, Event
 from .logging import configure_logging, get_logger
 from .middleware import Middleware, NextCall
-from .module import Module, ModuleMetadata, handles, module
+from .module import Module, ModuleMetadata, handles, module, subscribes
 from .resilience import (
     CircuitBreaker,
     CircuitBreakerMiddleware,
@@ -74,12 +75,17 @@ __all__ = [
     "Command",
     "CommandRequest",
     "CommandResponse",
+    "Event",
     # Module system
     "Module",
     "module",
     "ModuleMetadata",
     "ModuleHost",
     "handles",
+    "subscribes",
+    # In-process EventBus
+    "EventBus",
+    "EventHandler",
     # Configuration
     "ModuleHostConfig",
     # Middleware
