@@ -1,25 +1,37 @@
 """REST API generation layer for PyModules.
 
-This module provides API utilities including:
-- ModuleRouter: Auto-discovery router for Command classes
-- CommandDiscovery: Scans packages for Command classes
-- RouteConvention: Convention-based REST path generation
-- Decorators: @api_endpoint, @exclude_from_api
-- Errors: APIError hierarchy and error handlers
+This module exposes:
+
+- ``ModuleRouter``: maps ``@api_endpoint``-decorated Commands to FastAPI routes
+- ``CommandDiscovery`` / ``DiscoveredCommand``: scan a package for Commands
+- ``@api_endpoint`` / ``@exclude_from_api``: declare REST routes explicitly
+- ``HTTPMethod``: typed sugar for ``method=`` on ``@api_endpoint``
+- ``APIError`` hierarchy and FastAPI error handlers
+
+Routing is explicit: there is no class-name-to-URL convention (see CONTEXT.md,
+non-goal #1). Every endpoint declares its method and path on the Command class.
 
 Example:
-    from pymodules import ModuleHost
-    from pymodules.contrib.api import ModuleRouter, register_error_handlers
     from fastapi import FastAPI
+    from pymodules import ModuleHost
+    from pymodules.contrib.api import (
+        ModuleRouter,
+        api_endpoint,
+        register_error_handlers,
+    )
+
+    @api_endpoint(method="POST", path="/users")
+    class CreateUser(Command[CreateUserRequest, CreateUserResponse]):
+        pass
 
     host = ModuleHost()
-    # ... register modules
+    host.register(UserModule())
 
     app = FastAPI()
     register_error_handlers(app)
 
     router = ModuleRouter(host)
-    router.discover_commands("myapp.commands")
+    router.register_command(CreateUser)
     router.mount(app)
 """
 
@@ -33,8 +45,13 @@ from pymodules._imports import require_optional_dependency
 require_optional_dependency("fastapi", "pymodules.contrib.api", "api")
 
 if TYPE_CHECKING:
-    from .conventions import HTTPMethod, RESTConvention, RouteConvention, RouteInfo
-    from .decorators import api_endpoint, exclude_from_api, get_api_metadata, is_excluded_from_api
+    from .decorators import (
+        HTTPMethod,
+        api_endpoint,
+        exclude_from_api,
+        get_api_metadata,
+        is_excluded_from_api,
+    )
     from .discovery import CommandDiscovery, DiscoveredCommand
     from .errors import (
         APIError,
@@ -53,12 +70,8 @@ __all__ = [
     # Discovery
     "DiscoveredCommand",
     "CommandDiscovery",
-    # Conventions
-    "HTTPMethod",
-    "RouteConvention",
-    "RESTConvention",
-    "RouteInfo",
     # Decorators
+    "HTTPMethod",
     "api_endpoint",
     "exclude_from_api",
     "get_api_metadata",
@@ -84,11 +97,13 @@ def __getattr__(name: str):
         from . import discovery
 
         return getattr(discovery, name)
-    elif name in ("HTTPMethod", "RouteConvention", "RESTConvention", "RouteInfo"):
-        from . import conventions
-
-        return getattr(conventions, name)
-    elif name in ("api_endpoint", "exclude_from_api", "get_api_metadata", "is_excluded_from_api"):
+    elif name in (
+        "HTTPMethod",
+        "api_endpoint",
+        "exclude_from_api",
+        "get_api_metadata",
+        "is_excluded_from_api",
+    ):
         from . import decorators
 
         return getattr(decorators, name)

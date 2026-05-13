@@ -19,6 +19,7 @@ from pymodules import (
     handles,
     module,
 )
+from pymodules.contrib.api import api_endpoint
 from pymodules.contrib.db.mixins import UUIDType
 
 # Define Base and model at module level to avoid SQLAlchemy redefinition issues
@@ -97,22 +98,27 @@ class DeleteUserOutput(CommandResponse):
     success: bool
 
 
+@api_endpoint(method="POST", path="/users")
 class CreateUser(Command[CreateUserInput, CreateUserOutput]):
     pass
 
 
+@api_endpoint(method="GET", path="/users/{id}")
 class GetUser(Command[GetUserInput, GetUserOutput]):
     pass
 
 
+@api_endpoint(method="GET", path="/users")
 class ListUsers(Command[ListUsersInput, ListUsersOutput]):
     pass
 
 
+@api_endpoint(method="PUT", path="/users/{id}")
 class UpdateUser(Command[UpdateUserInput, UpdateUserOutput]):
     pass
 
 
+@api_endpoint(method="DELETE", path="/users/{id}")
 class DeleteUser(Command[DeleteUserInput, DeleteUserOutput]):
     pass
 

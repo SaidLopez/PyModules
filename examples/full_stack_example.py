@@ -166,47 +166,37 @@ class CompleteTaskOutput(CommandResponse):
 # =============================================================================
 
 
+@api_endpoint(method="POST", path="/tasks", tags=["Tasks"])
 class CreateTask(Command[CreateTaskInput, CreateTaskOutput]):
-    """Command to create a new task.
-
-    Convention: 'create' + 'Task' -> POST /tasks
-    """
+    """Command to create a new task."""
 
     pass
 
 
+@api_endpoint(method="GET", path="/tasks/{task_id}", tags=["Tasks"])
 class GetTask(Command[GetTaskInput, GetTaskOutput]):
-    """Command to get a task by ID.
-
-    Convention: 'get' + 'Task' -> GET /tasks/{id}
-    """
+    """Command to get a task by ID."""
 
     pass
 
 
+@api_endpoint(method="GET", path="/tasks", tags=["Tasks"])
 class ListTasks(Command[ListTasksInput, ListTasksOutput]):
-    """Command to list all tasks.
-
-    Convention: 'list' + 'Tasks' -> GET /tasks
-    """
+    """Command to list all tasks."""
 
     pass
 
 
+@api_endpoint(method="PUT", path="/tasks/{task_id}", tags=["Tasks"])
 class UpdateTask(Command[UpdateTaskInput, UpdateTaskOutput]):
-    """Command to update a task.
-
-    Convention: 'update' + 'Task' -> PUT /tasks/{id}
-    """
+    """Command to update a task."""
 
     pass
 
 
+@api_endpoint(method="DELETE", path="/tasks/{task_id}", tags=["Tasks"])
 class DeleteTask(Command[DeleteTaskInput, DeleteTaskOutput]):
-    """Command to delete a task.
-
-    Convention: 'delete' + 'Task' -> DELETE /tasks/{id}
-    """
+    """Command to delete a task."""
 
     pass
 
@@ -218,10 +208,7 @@ class DeleteTask(Command[DeleteTaskInput, DeleteTaskOutput]):
     summary="Mark a task as completed",
 )
 class CompleteTask(Command[CompleteTaskInput, CompleteTaskOutput]):
-    """Command to mark a task as completed.
-
-    Uses @api_endpoint for custom route.
-    """
+    """Command to mark a task as completed."""
 
     pass
 

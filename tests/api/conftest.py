@@ -40,8 +40,13 @@ def client(app: FastAPI) -> TestClient:
 
 @pytest.fixture
 def sample_commands():
-    """Create sample command classes for testing."""
+    """Create sample command classes for testing.
+
+    Each Command carries an explicit ``@api_endpoint`` decorator — the
+    contrib.api layer does no class-name-to-URL convention magic.
+    """
     from pymodules import Command, CommandRequest, CommandResponse
+    from pymodules.contrib.api import api_endpoint
 
     @dataclass
     class CreateUserInput(CommandRequest):
@@ -74,12 +79,15 @@ def sample_commands():
         users: list
         total: int
 
+    @api_endpoint(method="POST", path="/users")
     class CreateUser(Command[CreateUserInput, CreateUserOutput]):
         pass
 
+    @api_endpoint(method="GET", path="/users/{user_id}")
     class GetUser(Command[GetUserInput, GetUserOutput]):
         pass
 
+    @api_endpoint(method="GET", path="/users")
     class ListUsers(Command[ListUsersInput, ListUsersOutput]):
         pass
 

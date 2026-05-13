@@ -139,7 +139,7 @@ class TestExcludeFromApiDecorator:
     def test_excluded_commands_not_discovered(self, app, host) -> None:
         """Excluded commands should not be registered by ModuleRouter."""
         from pymodules import Command, CommandRequest, CommandResponse
-        from pymodules.contrib.api import ModuleRouter, exclude_from_api
+        from pymodules.contrib.api import ModuleRouter, api_endpoint, exclude_from_api
 
         @dataclass
         class TestInput(CommandRequest):
@@ -150,9 +150,11 @@ class TestExcludeFromApiDecorator:
             result: str
 
         @exclude_from_api
+        @api_endpoint(method="POST", path="/internal")
         class InternalCommand(Command[TestInput, TestOutput]):
             pass
 
+        @api_endpoint(method="POST", path="/public")
         class PublicCommand(Command[TestInput, TestOutput]):
             pass
 
@@ -167,3 +169,4 @@ class TestExcludeFromApiDecorator:
 
         # InternalCommand should not have a route
         assert not any("internal" in r.lower() for r in routes)
+        assert any("public" in r.lower() for r in routes)

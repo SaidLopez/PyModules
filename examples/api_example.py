@@ -1,9 +1,8 @@
 """API layer example.
 
 This example demonstrates how to use the pymodules.contrib.api layer for:
-- ModuleRouter with auto-discovery
-- Convention-based REST routing
-- Custom endpoint decorators
+- ModuleRouter mounting @api_endpoint-decorated Commands on FastAPI
+- Explicit method/path declaration on each Command
 - Error handling
 
 Requirements:
@@ -114,43 +113,35 @@ class SearchProductsOutput(CommandResponse):
 # =============================================================================
 
 
+@api_endpoint(method="POST", path="/products", tags=["Products"])
 class CreateProduct(Command[CreateProductInput, CreateProductOutput]):
-    """Command to create a new product.
-
-    Convention: 'create' + 'Product' -> POST /products
-    """
+    """Command to create a new product."""
 
     pass
 
 
+@api_endpoint(method="GET", path="/products/{product_id}", tags=["Products"])
 class GetProduct(Command[GetProductInput, GetProductOutput]):
-    """Command to get a product by ID.
-
-    Convention: 'get' + 'Product' -> GET /products/{id}
-    """
+    """Command to get a product by ID."""
 
     pass
 
 
+@api_endpoint(method="GET", path="/products", tags=["Products"])
 class ListProducts(Command[ListProductsInput, ListProductsOutput]):
-    """Command to list all products.
-
-    Convention: 'list' + 'Products' -> GET /products
-    """
+    """Command to list all products."""
 
     pass
 
 
 @api_endpoint(
+    method="POST",
     path="/products/search",
     tags=["Products", "Search"],
     summary="Search products by criteria",
 )
 class SearchProducts(Command[SearchProductsInput, SearchProductsOutput]):
-    """Command to search products with custom endpoint.
-
-    Uses @api_endpoint to override convention-based routing.
-    """
+    """Command to search products with a dedicated endpoint."""
 
     pass
 

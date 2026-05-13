@@ -529,14 +529,45 @@ settings = DatabaseSettings(
 
 ## API Layer
 
-The API layer provides automatic REST endpoint generation from Event classes with convention-based routing.
+The API layer maps `@api_endpoint`-decorated Commands to FastAPI routes. There
+is no class-name-to-URL convention: each Command declares its HTTP method and
+path explicitly. Class names are an internal concern; URLs are an external
+contract.
+
+### Declaring endpoints
+
+```python
+from pymodules import Command
+from pymodules.contrib.api import api_endpoint, exclude_from_api
+
+@api_endpoint(method="POST", path="/users")
+class CreateUser(Command[CreateUserRequest, CreateUserResponse]):
+    pass
+
+@api_endpoint(method="GET", path="/users/{user_id}")
+class GetUser(Command[GetUserRequest, GetUserResponse]):
+    pass
+
+@api_endpoint(
+    method="POST",
+    path="/users/search",
+    tags=["Users", "Search"],
+    summary="Search users by criteria",
+)
+class SearchUsers(Command[SearchUsersRequest, SearchUsersResponse]):
+    pass
+
+@exclude_from_api  # Not exposed as REST endpoint
+class InternalSyncCommand(Command[CommandRequest, CommandResponse]):
+    pass
+```
 
 ### ModuleRouter
 
 ```python
 from fastapi import FastAPI
 from pymodules import ModuleHost
-from pymodules.api import ModuleRouter, register_error_handlers
+from pymodules.contrib.api import ModuleRouter, register_error_handlers
 
 # Set up host and modules
 host = ModuleHost()
@@ -546,49 +577,18 @@ host.register(UserModule())
 app = FastAPI()
 register_error_handlers(app)
 
-# Create router and register events
+# Register the @api_endpoint-decorated commands
 router = ModuleRouter(host)
-router.register_event(CreateUser)
-router.register_event(GetUser)
-router.register_event(ListUsers)
+router.register_command(CreateUser)
+router.register_command(GetUser)
+router.register_command(SearchUsers)
 
 # Mount on app
 router.mount(app, prefix="/api/v1")
 ```
 
-### Convention-Based Routing
-
-Events are automatically mapped to REST endpoints based on naming:
-
-| Event Name | HTTP Method | Path |
-|------------|-------------|------|
-| `CreateUser` | POST | `/users` |
-| `GetUser` | GET | `/users/{user_id}` |
-| `ListUsers` | GET | `/users` |
-| `UpdateUser` | PUT | `/users/{user_id}` |
-| `DeleteUser` | DELETE | `/users/{user_id}` |
-| `SearchUsers` | POST | `/users/search` |
-
-### Custom Endpoints
-
-Override conventions with decorators:
-
-```python
-from pymodules.api import api_endpoint, exclude_from_api
-
-@api_endpoint(
-    path="/users/search",
-    method="POST",
-    tags=["Users", "Search"],
-    summary="Search users by criteria",
-)
-class SearchUsers(Event[SearchUsersInput, SearchUsersOutput]):
-    pass
-
-@exclude_from_api  # Not exposed as REST endpoint
-class InternalSyncEvent(Event[EventInput, EventOutput]):
-    pass
-```
+Commands without `@api_endpoint` are skipped silently — register them only via
+`ModuleHost` if you want them to remain internal.
 
 ### Authentication
 

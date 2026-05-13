@@ -1,14 +1,28 @@
-"""API endpoint decorators for customizing route generation.
+"""API endpoint decorators for declaring REST routes.
 
-These decorators allow Command classes to override the default convention-based
-routing with custom paths, methods, tags, and permissions.
+Each Command class is declared with `@api_endpoint(method=..., path=...)` to
+expose it through the REST router. There is no class-name-to-URL convention:
+class names are internal, URLs are an external contract, and the binding is
+explicit by design (see CONTEXT.md, non-goal #1).
 """
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
 
-from .conventions import HTTPMethod
+
+# Rescued from the deleted ``conventions.py``: the enum is still useful as a
+# typed sugar for the ``method=`` argument of ``@api_endpoint``.
+class HTTPMethod(str, Enum):
+    """HTTP methods for REST endpoints."""
+
+    GET = "GET"
+    POST = "POST"
+    PUT = "PUT"
+    PATCH = "PATCH"
+    DELETE = "DELETE"
+
 
 # Attribute names used to store decorator metadata on Command classes
 _API_METADATA_ATTR = "_api_endpoint_metadata"
@@ -25,7 +39,7 @@ def api_endpoint(
     deprecated: bool = False,
     include_in_schema: bool = True,
     required_permissions: list[str] | None = None,
-    public: bool = False,
+    public: bool = True,
     response_model_exclude_none: bool = True,
 ) -> Any:
     """Decorator to customize API endpoint generation for a Command class.
