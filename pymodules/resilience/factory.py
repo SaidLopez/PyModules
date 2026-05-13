@@ -12,12 +12,14 @@ import os
 from ..middleware import Middleware
 from .circuit_breaker import CircuitBreaker, CircuitBreakerMiddleware
 from .dlq import DeadLetterQueue, DLQMiddleware
+from .idempotency import IdempotencyMiddleware, InMemoryIdempotencyStore
 from .rate_limit import RateLimitMiddleware
 from .retry import RetryMiddleware, RetryPolicy
 
 
 def default_middleware(
     *,
+    idempotency_ttl: float | None = None,
     rate_limit: float | None = None,
     rate_limit_burst: int = 10,
     rate_limit_block: bool = False,
@@ -32,13 +34,24 @@ def default_middleware(
     """
     Build a list of middleware in the standard order:
 
-        rate_limit → circuit_breaker → retry → dlq → tracing → metrics
+        idempotency → rate_limit → circuit_breaker → retry → dlq → tracing → metrics
 
     Each concern is opt-in via its kwarg; passing ``None`` (or 0 for
     integer thresholds) omits that middleware. The terminal middleware is
     added by the host itself and is not part of this list.
+
+    Idempotency sits at the outermost layer so a cached hit returns
+    before rate-limit tokens are consumed, breaker state is touched, or
+    retry runs. For non-default stores (Redis, SQL), build the chain by
+    hand and prepend ``IdempotencyMiddleware(your_store)`` yourself —
+    ``idempotency_ttl`` only configures the bundled in-memory store.
     """
     chain: list[Middleware] = []
+
+    if idempotency_ttl is not None and idempotency_ttl > 0:
+        chain.append(
+            IdempotencyMiddleware(InMemoryIdempotencyStore(ttl_seconds=idempotency_ttl))
+        )
 
     if rate_limit is not None and rate_limit > 0:
         chain.append(
@@ -83,12 +96,14 @@ def default_middleware_from_env() -> list[Middleware]:
     """
     Same as ``default_middleware`` but parameterised via environment vars:
 
+      - ``PYMODULES_IDEMPOTENCY_TTL``
       - ``PYMODULES_RATE_LIMIT``, ``PYMODULES_RATE_LIMIT_BURST``
       - ``PYMODULES_CIRCUIT_BREAKER_THRESHOLD``, ``PYMODULES_CIRCUIT_BREAKER_TIMEOUT``
       - ``PYMODULES_RETRY_MAX``, ``PYMODULES_RETRY_BASE_DELAY``
       - ``PYMODULES_DLQ_SIZE``
       - ``PYMODULES_ENABLE_TRACING``, ``PYMODULES_ENABLE_METRICS``
     """
+    idempotency_ttl = float(os.getenv("PYMODULES_IDEMPOTENCY_TTL", "0"))
     rate_limit = float(os.getenv("PYMODULES_RATE_LIMIT", "0"))
     rate_limit_burst = int(os.getenv("PYMODULES_RATE_LIMIT_BURST", "10"))
     cb_threshold = int(os.getenv("PYMODULES_CIRCUIT_BREAKER_THRESHOLD", "0"))
@@ -100,6 +115,7 @@ def default_middleware_from_env() -> list[Middleware]:
     enable_metrics = os.getenv("PYMODULES_ENABLE_METRICS", "false").lower() == "true"
 
     return default_middleware(
+        idempotency_ttl=idempotency_ttl if idempotency_ttl > 0 else None,
         rate_limit=rate_limit if rate_limit > 0 else None,
         rate_limit_burst=rate_limit_burst,
         circuit_breaker_threshold=cb_threshold if cb_threshold > 0 else None,

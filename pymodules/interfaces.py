@@ -60,9 +60,14 @@ class Command(Generic[Req, Resp]):
     is not mutated.
 
     Attributes:
-        name: Unique identifier for this command type (e.g., "com.example.greet")
-        request: Request data passed to the handler
-        meta: Additional metadata that can be passed between Modules
+        name: Unique identifier for this command type (e.g., "com.example.greet").
+        request: Request data passed to the handler.
+        meta: Additional metadata that can be passed between Modules.
+        command_id: Optional caller-supplied identifier for idempotency.
+            When set, ``IdempotencyMiddleware`` (if present) caches the
+            response under this key and returns the cached value on a
+            subsequent dispatch with the same id. ``None`` means the
+            dispatch is not de-duplicated.
 
     The ``Resp`` type parameter exists for static typing only: it lets
     ``ModuleHost.dispatch(cmd: Command[Req, Resp]) -> Resp`` propagate the
@@ -84,6 +89,7 @@ class Command(Generic[Req, Resp]):
     name: str = ""
     request: Req | None = None
     meta: dict[str, Any] = field(default_factory=dict)
+    command_id: str | None = None
 
     def __post_init__(self) -> None:
         # Allow subclasses to define name as class attribute

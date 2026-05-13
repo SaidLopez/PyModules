@@ -20,6 +20,7 @@ from .circuit_breaker import (
 from .dlq import DeadLetterEntry, DeadLetterQueue, DLQMiddleware
 from .factory import default_middleware, default_middleware_from_env
 from .fallback import Fallback, FallbackMiddleware
+from .idempotency import IdempotencyMiddleware, IdempotencyStore, InMemoryIdempotencyStore
 from .rate_limit import RateLimitExceeded, RateLimitMiddleware
 from .retry import RetryMiddleware, RetryPolicy
 
@@ -35,6 +36,10 @@ __all__ = [
     # Retry
     "RetryMiddleware",
     "RetryPolicy",
+    # Idempotency
+    "IdempotencyMiddleware",
+    "IdempotencyStore",
+    "InMemoryIdempotencyStore",
     # Dead Letter Queue
     "DLQMiddleware",
     "DeadLetterEntry",

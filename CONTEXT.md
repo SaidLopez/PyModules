@@ -13,7 +13,7 @@ A user who wants only the dispatch core must not be forced to reason about Redis
 ## Language
 
 **Command**:
-A named request with a typed request payload and a typed response. Exactly one **Module** claims it via the type-routed registry; the **Module** returns the response.
+A named request with a typed request payload and a typed response. Exactly one **Module** claims it via the type-routed registry; the **Module** returns the response. Optionally carries a caller-supplied `command_id` for idempotency: a second dispatch with the same id (while the entry remains in the idempotency store) returns the cached response without re-invoking the handler.
 _Avoid_: Event, message, request (when ambiguous).
 
 **CommandRequest**:
