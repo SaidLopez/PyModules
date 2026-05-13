@@ -110,8 +110,8 @@ class TestApiEndpointDecorator:
             pass
 
         # Class should still be instantiable and work as Command
-        cmd = CustomCommand(input=TestInput(value="test"))
-        assert cmd.input.value == "test"
+        cmd = CustomCommand(request=TestInput(value="test"))
+        assert cmd.request.value == "test"
 
 
 class TestExcludeFromApiDecorator:

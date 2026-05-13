@@ -37,11 +37,10 @@ class ErrorCommand(Command[ErrorInput, ErrorOutput]):
 @module(name="ErrorModule", description="A module that can raise errors")
 class ErrorModule(Module):
     @handles(ErrorCommand)
-    def handle_error(self, command: ErrorCommand) -> None:
-        if command.input.should_fail:
+    def handle_error(self, command: ErrorCommand) -> ErrorOutput:
+        if command.request.should_fail:
             raise ValueError("Intentional test error")
-        command.output = ErrorOutput(result="success")
-        command.handled = True
+        return ErrorOutput(result="success")
 
 
 @module(name="FailOnLoad", description="Fails during registration")
@@ -59,7 +58,7 @@ class TestErrorPropagation:
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 
-        command = ErrorCommand(input=ErrorInput(should_fail=True))
+        command = ErrorCommand(request=ErrorInput(should_fail=True))
 
         with pytest.raises(CommandHandlingError) as exc_info:
             host.dispatch(command)
@@ -74,12 +73,12 @@ class TestErrorPropagation:
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 
-        command = ErrorCommand(input=ErrorInput(should_fail=True))
+        command = ErrorCommand(request=ErrorInput(should_fail=True))
         result = host.dispatch(command)
 
-        # Should not raise, but command should not be marked as handled
-        assert result is command
-        assert not command.handled
+        # Should not raise; with the handler raising before returning, the
+        # dispatch result is None.
+        assert result is None
 
     def test_on_error_callback(self):
         """Test that on_error callback is called on exceptions."""
@@ -92,7 +91,7 @@ class TestErrorPropagation:
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 
-        command = ErrorCommand(input=ErrorInput(should_fail=True))
+        command = ErrorCommand(request=ErrorInput(should_fail=True))
         host.dispatch(command)
 
         assert len(errors) == 1
@@ -135,7 +134,7 @@ class TestCommandHandlingErrorDetails:
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 
-        command = ErrorCommand(input=ErrorInput(should_fail=True))
+        command = ErrorCommand(request=ErrorInput(should_fail=True))
 
         try:
             host.dispatch(command)
@@ -150,7 +149,7 @@ class TestCommandHandlingErrorDetails:
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 
-        command = ErrorCommand(input=ErrorInput(should_fail=True))
+        command = ErrorCommand(request=ErrorInput(should_fail=True))
 
         try:
             host.dispatch(command)

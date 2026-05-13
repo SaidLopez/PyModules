@@ -273,10 +273,11 @@ class EventConsumer:
             # Dispatch through host
             logger.debug("Dispatching %s from message %s", command.name, message.id)
 
-            # Use async dispatch
-            await self.host.dispatch_async(command)
+            # Use async dispatch. ``response`` is the handler's return value,
+            # or ``None`` if no module claims the command class.
+            response = await self.host.dispatch_async(command)
 
-            if command.handled:
+            if response is not None:
                 logger.debug("Command %s handled successfully", command.name)
                 if self.config.auto_ack:
                     await self.broker.ack(message)
@@ -313,7 +314,7 @@ class EventConsumer:
             return None
 
         # Build the in-process Command with broker-message data
-        request = ExternalEventInput(
+        ext_request = ExternalEventInput(
             data=message.data,
             headers=message.headers,
             source_stream=message.stream,
@@ -322,7 +323,7 @@ class EventConsumer:
 
         command = ExternalEvent(
             name=event_name,
-            input=request,
+            request=ext_request,
         )
 
         # Copy trace context from headers

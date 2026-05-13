@@ -41,9 +41,8 @@ class GreetCommand(Command[GreetInput, GreetOutput]):
 @module(name="GreeterModule")
 class GreeterModule(Module):
     @handles(GreetCommand)
-    def greet(self, command: GreetCommand) -> None:
-        command.output = GreetOutput(message=f"Hello, {command.input.name}!")
-        command.handled = True
+    def greet(self, command: GreetCommand) -> GreetOutput:
+        return GreetOutput(message=f"Hello, {command.request.name}!")
 
 
 @dataclass
@@ -65,9 +64,9 @@ class CalculateCommand(Command[CalculateInput, CalculateOutput]):
 @module(name="CalculatorModule")
 class CalculatorModule(Module):
     @handles(CalculateCommand)
-    def calculate(self, command: CalculateCommand) -> None:
-        a, b = command.input.a, command.input.b
-        op = command.input.operation
+    def calculate(self, command: CalculateCommand) -> CalculateOutput:
+        a, b = command.request.a, command.request.b
+        op = command.request.operation
 
         if op == "add":
             result = a + b
@@ -78,8 +77,7 @@ class CalculatorModule(Module):
         else:
             result = 0
 
-        command.output = CalculateOutput(result=result)
-        command.handled = True
+        return CalculateOutput(result=result)
 
 
 @pytest.fixture
@@ -204,11 +202,11 @@ class TestPyModulesAPIManualDispatch:
 
         api = PyModulesAPI(host)
 
-        command = GreetCommand(input=GreetInput(name="Manual"))
+        command = GreetCommand(request=GreetInput(name="Manual"))
         result = await api.dispatch(command)
 
-        assert result.handled
-        assert result.output.message == "Hello, Manual!"
+        assert isinstance(result, GreetOutput)
+        assert result.message == "Hello, Manual!"
 
     @pytest.mark.asyncio
     async def test_manual_dispatch_unhandled(self):
@@ -218,7 +216,7 @@ class TestPyModulesAPIManualDispatch:
         host = ModuleHost()
         api = PyModulesAPI(host)
 
-        command = GreetCommand(input=GreetInput(name="Test"))
+        command = GreetCommand(request=GreetInput(name="Test"))
 
         with pytest.raises(HTTPException) as exc_info:
             await api.dispatch(command)

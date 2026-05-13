@@ -143,63 +143,58 @@ async def full_stack_setup(tmp_path):
             self.repo = repo
 
         @handles(CreateUser)
-        async def create_user(self, command: CreateUser) -> None:
+        async def create_user(self, command: CreateUser) -> CreateUserOutput:
             user = await self.repo.create(
-                name=command.input.name,
-                email=command.input.email,
+                name=command.request.name,
+                email=command.request.email,
             )
-            command.output = CreateUserOutput(
+            return CreateUserOutput(
                 id=str(user.id),
                 name=user.name,
                 email=user.email,
             )
-            command.handled = True
 
         @handles(GetUser)
-        async def get_user(self, command: GetUser) -> None:
-            user = await self.repo.get_by_id(UUID(command.input.id))
+        async def get_user(self, command: GetUser) -> GetUserOutput:
+            user = await self.repo.get_by_id(UUID(command.request.id))
             if not user:
                 raise ValueError("User not found")
-            command.output = GetUserOutput(
+            return GetUserOutput(
                 id=str(user.id),
                 name=user.name,
                 email=user.email,
             )
-            command.handled = True
 
         @handles(ListUsers)
-        async def list_users(self, command: ListUsers) -> None:
+        async def list_users(self, command: ListUsers) -> ListUsersOutput:
             users = await self.repo.get_all(
-                limit=command.input.limit,
-                offset=command.input.offset,
+                limit=command.request.limit,
+                offset=command.request.offset,
             )
             total = await self.repo.count()
-            command.output = ListUsersOutput(
+            return ListUsersOutput(
                 users=[{"id": str(u.id), "name": u.name} for u in users],
                 total=total,
             )
-            command.handled = True
 
         @handles(UpdateUser)
-        async def update_user(self, command: UpdateUser) -> None:
+        async def update_user(self, command: UpdateUser) -> UpdateUserOutput:
             updates = {}
-            if command.input.name:
-                updates["name"] = command.input.name
-            if command.input.email:
-                updates["email"] = command.input.email
-            user = await self.repo.update(UUID(command.input.id), **updates)
-            command.output = UpdateUserOutput(
+            if command.request.name:
+                updates["name"] = command.request.name
+            if command.request.email:
+                updates["email"] = command.request.email
+            user = await self.repo.update(UUID(command.request.id), **updates)
+            return UpdateUserOutput(
                 id=str(user.id),
                 name=user.name,
                 email=user.email,
             )
-            command.handled = True
 
         @handles(DeleteUser)
-        async def delete_user(self, command: DeleteUser) -> None:
-            result = await self.repo.delete(UUID(command.input.id))
-            command.output = DeleteUserOutput(success=result)
-            command.handled = True
+        async def delete_user(self, command: DeleteUser) -> DeleteUserOutput:
+            result = await self.repo.delete(UUID(command.request.id))
+            return DeleteUserOutput(success=result)
 
     # Set up host
     host = ModuleHost()
@@ -272,10 +267,10 @@ class TestFullStackIntegration:
 
         # First create a user via command
         create_cmd = commands["CreateUser"](
-            input=inputs["CreateUserInput"](name="Jane", email="jane@example.com")
+            request=inputs["CreateUserInput"](name="Jane", email="jane@example.com")
         )
-        await host.dispatch_async(create_cmd)
-        user_id = create_cmd.output.id
+        create_response = await host.dispatch_async(create_cmd)
+        user_id = create_response.id
 
         # Now test getting via API
         from fastapi import FastAPI
@@ -309,7 +304,7 @@ class TestFullStackIntegration:
         # Create a few users
         for i in range(3):
             cmd = commands["CreateUser"](
-                input=inputs["CreateUserInput"](name=f"User {i}", email=f"user{i}@example.com")
+                request=inputs["CreateUserInput"](name=f"User {i}", email=f"user{i}@example.com")
             )
             await host.dispatch_async(cmd)
 
@@ -347,10 +342,10 @@ class TestFullStackIntegration:
 
         # Create user
         create_cmd = commands["CreateUser"](
-            input=inputs["CreateUserInput"](name="Original", email="original@example.com")
+            request=inputs["CreateUserInput"](name="Original", email="original@example.com")
         )
-        await host.dispatch_async(create_cmd)
-        user_id = create_cmd.output.id
+        create_response = await host.dispatch_async(create_cmd)
+        user_id = create_response.id
 
         # Test update via API
         from fastapi import FastAPI
@@ -383,10 +378,10 @@ class TestFullStackIntegration:
 
         # Create user
         create_cmd = commands["CreateUser"](
-            input=inputs["CreateUserInput"](name="ToDelete", email="delete@example.com")
+            request=inputs["CreateUserInput"](name="ToDelete", email="delete@example.com")
         )
-        await host.dispatch_async(create_cmd)
-        user_id = create_cmd.output.id
+        create_response = await host.dispatch_async(create_cmd)
+        user_id = create_response.id
 
         # Test delete via API
         from fastapi import FastAPI

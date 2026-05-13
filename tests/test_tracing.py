@@ -44,9 +44,8 @@ class TracingCommand(Command[TracingInput, TracingOutput]):
 @module(name="TracingModule")
 class TracingModule(Module):
     @handles(TracingCommand)
-    def handle_tracing(self, command: TracingCommand) -> None:
-        command.output = TracingOutput(result=f"traced: {command.input.value}")
-        command.handled = True
+    def handle_tracing(self, command: TracingCommand) -> TracingOutput:
+        return TracingOutput(result=f"traced: {command.request.value}")
 
 
 class TestGenerateId:
@@ -287,7 +286,7 @@ class TestCommandTracing:
         tracer = Tracer()
         set_tracer(tracer)
 
-        command = TracingCommand(input=TracingInput(value="test"))
+        command = TracingCommand(request=TracingInput(value="test"))
 
         with tracer.trace("operation", correlation_id="my-id") as ctx:
             inject_trace_context(command)
@@ -297,7 +296,7 @@ class TestCommandTracing:
 
     def test_extract_trace_context(self):
         """Trace context can be extracted from command."""
-        command = TracingCommand(input=TracingInput(value="test"))
+        command = TracingCommand(request=TracingInput(value="test"))
         command.meta["trace_id"] = "abc123"
         command.meta["correlation_id"] = "xyz789"
         command.meta["parent_span_id"] = "span123"
@@ -318,7 +317,7 @@ class TestHostWithTracing:
         host = ModuleHost(config=config)
         host.register(TracingModule())
 
-        command = TracingCommand(input=TracingInput(value="test"))
+        command = TracingCommand(request=TracingInput(value="test"))
         host.dispatch(command)
 
         # Command should have trace context
@@ -330,7 +329,7 @@ class TestHostWithTracing:
         host = ModuleHost(config=config)
         host.register(TracingModule())
 
-        command = TracingCommand(input=TracingInput(value="test"))
+        command = TracingCommand(request=TracingInput(value="test"))
         host.dispatch(command)
 
         # Command should not have trace context

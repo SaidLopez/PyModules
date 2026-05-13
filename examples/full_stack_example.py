@@ -240,28 +240,27 @@ class TaskModule(Module):
         self.repo = repository
 
     @handles(CreateTask)
-    async def _handle_create(self, command: CreateTask) -> None:
+    async def _handle_create(self, command: CreateTask) -> CreateTaskOutput:
         """Handle task creation."""
         task = await self.repo.create(
-            title=command.input.title,
-            description=command.input.description,
+            title=command.request.title,
+            description=command.request.description,
         )
-        command.output = CreateTaskOutput(
+        return CreateTaskOutput(
             id=str(task.id),
             title=task.title,
             description=task.description,
             status=task.status,
         )
-        command.handled = True
 
     @handles(GetTask)
-    async def _handle_get(self, command: GetTask) -> None:
+    async def _handle_get(self, command: GetTask) -> GetTaskOutput:
         """Handle getting a single task."""
-        task = await self.repo.get_by_id(UUID(command.input.task_id))
+        task = await self.repo.get_by_id(UUID(command.request.task_id))
         if not task:
-            raise ValueError(f"Task {command.input.task_id} not found")
+            raise ValueError(f"Task {command.request.task_id} not found")
 
-        command.output = GetTaskOutput(
+        return GetTaskOutput(
             id=str(task.id),
             title=task.title,
             description=task.description,
@@ -269,19 +268,18 @@ class TaskModule(Module):
             created_at=task.created_at.isoformat(),
             updated_at=task.updated_at.isoformat(),
         )
-        command.handled = True
 
     @handles(ListTasks)
-    async def _handle_list(self, command: ListTasks) -> None:
+    async def _handle_list(self, command: ListTasks) -> ListTasksOutput:
         """Handle listing tasks."""
         tasks = await self.repo.get_all(
-            limit=command.input.limit,
-            offset=command.input.offset,
-            include_deleted=command.input.include_deleted,
+            limit=command.request.limit,
+            offset=command.request.offset,
+            include_deleted=command.request.include_deleted,
         )
         total = await self.repo.count()
 
-        command.output = ListTasksOutput(
+        return ListTasksOutput(
             tasks=[
                 {
                     "id": str(t.id),
@@ -293,37 +291,35 @@ class TaskModule(Module):
             ],
             total=total,
         )
-        command.handled = True
 
     @handles(UpdateTask)
-    async def _handle_update(self, command: UpdateTask) -> None:
+    async def _handle_update(self, command: UpdateTask) -> UpdateTaskOutput:
         """Handle task update."""
         updates = {}
-        if command.input.title is not None:
-            updates["title"] = command.input.title
-        if command.input.description is not None:
-            updates["description"] = command.input.description
-        if command.input.status is not None:
-            updates["status"] = command.input.status
+        if command.request.title is not None:
+            updates["title"] = command.request.title
+        if command.request.description is not None:
+            updates["description"] = command.request.description
+        if command.request.status is not None:
+            updates["status"] = command.request.status
 
-        task = await self.repo.update(UUID(command.input.task_id), **updates)
+        task = await self.repo.update(UUID(command.request.task_id), **updates)
         if not task:
-            raise ValueError(f"Task {command.input.task_id} not found")
+            raise ValueError(f"Task {command.request.task_id} not found")
 
-        command.output = UpdateTaskOutput(
+        return UpdateTaskOutput(
             id=str(task.id),
             title=task.title,
             description=task.description,
             status=task.status,
         )
-        command.handled = True
 
     @handles(DeleteTask)
-    async def _handle_delete(self, command: DeleteTask) -> None:
+    async def _handle_delete(self, command: DeleteTask) -> DeleteTaskOutput:
         """Handle task deletion."""
-        task_id = UUID(command.input.task_id)
+        task_id = UUID(command.request.task_id)
 
-        if command.input.hard_delete:
+        if command.request.hard_delete:
             success = await self.repo.delete(task_id)
             message = "Task permanently deleted" if success else "Task not found"
         else:
@@ -331,25 +327,23 @@ class TaskModule(Module):
             success = True
             message = "Task soft deleted"
 
-        command.output = DeleteTaskOutput(success=success, message=message)
-        command.handled = True
+        return DeleteTaskOutput(success=success, message=message)
 
     @handles(CompleteTask)
-    async def _handle_complete(self, command: CompleteTask) -> None:
+    async def _handle_complete(self, command: CompleteTask) -> CompleteTaskOutput:
         """Handle marking a task as completed."""
         task = await self.repo.update(
-            UUID(command.input.task_id),
+            UUID(command.request.task_id),
             status="completed",
         )
         if not task:
-            raise ValueError(f"Task {command.input.task_id} not found")
+            raise ValueError(f"Task {command.request.task_id} not found")
 
-        command.output = CompleteTaskOutput(
+        return CompleteTaskOutput(
             id=str(task.id),
             title=task.title,
             status=task.status,
         )
-        command.handled = True
 
 
 # =============================================================================

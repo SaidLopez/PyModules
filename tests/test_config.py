@@ -35,9 +35,8 @@ class ConfigCommand(Command[ConfigInput, ConfigOutput]):
 @module(name="ConfigModule")
 class ConfigModule(Module):
     @handles(ConfigCommand)
-    def handle_config(self, command: ConfigCommand) -> None:
-        command.output = ConfigOutput(result=f"processed: {command.input.value}")
-        command.handled = True
+    def handle_config(self, command: ConfigCommand) -> ConfigOutput:
+        return ConfigOutput(result=f"processed: {command.request.value}")
 
 
 class TestModuleHostConfig:
@@ -124,7 +123,7 @@ class TestMetrics:
         host.register(ConfigModule())
 
         # Dispatch handled command
-        command = ConfigCommand(input=ConfigInput(value="test"))
+        command = ConfigCommand(request=ConfigInput(value="test"))
         host.dispatch(command)
 
         assert host.metrics.events_dispatched == 1
@@ -137,7 +136,7 @@ class TestMetrics:
         host = ModuleHost(config=config)
         # No modules registered
 
-        command = ConfigCommand(input=ConfigInput(value="test"))
+        command = ConfigCommand(request=ConfigInput(value="test"))
         host.dispatch(command)
 
         assert host.metrics.events_dispatched == 1
@@ -150,7 +149,7 @@ class TestMetrics:
         host = ModuleHost(config=config)
         host.register(ConfigModule())
 
-        command = ConfigCommand(input=ConfigInput(value="test"))
+        command = ConfigCommand(request=ConfigInput(value="test"))
         host.dispatch(command)
 
         metrics_dict = host.metrics.to_dict()
@@ -193,7 +192,7 @@ class TestLifecycleHooks:
         host = ModuleHost(config=config)
         host.register(ConfigModule())
 
-        command = ConfigCommand(input=ConfigInput(value="test"))
+        command = ConfigCommand(request=ConfigInput(value="test"))
         host.dispatch(command)
 
         assert len(started) == 1
@@ -210,7 +209,7 @@ class TestLifecycleHooks:
         host = ModuleHost(config=config)
         host.register(ConfigModule())
 
-        command = ConfigCommand(input=ConfigInput(value="test"))
+        command = ConfigCommand(request=ConfigInput(value="test"))
         host.dispatch(command)
 
         assert len(ended) == 1
@@ -227,8 +226,8 @@ class TestLifecycleHooks:
         host = ModuleHost(config=config)
         host.register(ConfigModule())
 
-        command = ConfigCommand(input=ConfigInput(value="test"))
+        command = ConfigCommand(request=ConfigInput(value="test"))
         # Should not raise
         result = host.dispatch(command)
 
-        assert result.handled is True
+        assert isinstance(result, ConfigOutput)

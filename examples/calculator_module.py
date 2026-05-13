@@ -38,25 +38,23 @@ class CalculatorModule(Module):
         host = ModuleHost()
         host.register(CalculatorModule())
 
-        command = CalculatorCommand(input=CalculatorInput(a=1, b=2, operation="+"))
-        host.dispatch(command)
-        print(command.output.result)  # 3
+        command = CalculatorCommand(request=CalculatorInput(a=1, b=2, operation="+"))
+        response = host.dispatch(command)
+        print(response.result)  # 3
     """
 
     @handles(CalculatorCommand)
-    def calculate(self, command: CalculatorCommand) -> None:
-        inp = command.input
-        if inp.operation == "+":
-            result = inp.a + inp.b
-        elif inp.operation == "-":
-            result = inp.a - inp.b
-        elif inp.operation == "*":
-            result = inp.a * inp.b
-        elif inp.operation == "/":
-            result = inp.a / inp.b
+    def calculate(self, command: CalculatorCommand) -> CalculatorOutput:
+        req = command.request
+        if req.operation == "+":
+            result = req.a + req.b
+        elif req.operation == "-":
+            result = req.a - req.b
+        elif req.operation == "*":
+            result = req.a * req.b
+        elif req.operation == "/":
+            result = req.a / req.b
         else:
-            command.handled = False
-            return
+            raise ValueError(f"Unsupported operation: {req.operation}")
 
-        command.output = CalculatorOutput(result=result)
-        command.handled = True
+        return CalculatorOutput(result=result)

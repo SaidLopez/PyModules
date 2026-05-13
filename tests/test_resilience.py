@@ -49,12 +49,11 @@ class FailingModule(Module):
         self.call_count = 0
 
     @handles(TestCommand)
-    def handle_test(self, command: TestCommand) -> None:
+    def handle_test(self, command: TestCommand) -> TestOutput:
         self.call_count += 1
-        if command.input.should_fail:
+        if command.request.should_fail:
             raise ValueError("Intentional failure")
-        command.output = TestOutput(result=f"processed: {command.input.value}")
-        command.handled = True
+        return TestOutput(result=f"processed: {command.request.value}")
 
 
 class TestRateLimiter:
@@ -255,7 +254,7 @@ class TestDeadLetterQueue:
     def test_add_entry(self):
         """DLQ accepts entries."""
         dlq = DeadLetterQueue(max_size=100)
-        command = TestCommand(input=TestInput(value="test"))
+        command = TestCommand(request=TestInput(value="test"))
         error = ValueError("Test error")
 
         entry = dlq.add(command, error, module_name="TestModule")
@@ -270,27 +269,27 @@ class TestDeadLetterQueue:
         dlq = DeadLetterQueue(max_size=2)
 
         for i in range(5):
-            command = TestCommand(input=TestInput(value=str(i)))
+            command = TestCommand(request=TestInput(value=str(i)))
             dlq.add(command, ValueError(f"Error {i}"))
 
         assert len(dlq) == 2
         # Oldest entries should be dropped
         entries = dlq.entries
-        assert entries[0].command.input.value == "3"
-        assert entries[1].command.input.value == "4"
+        assert entries[0].command.request.value == "3"
+        assert entries[1].command.request.value == "4"
 
     def test_pop(self):
         """DLQ supports pop."""
         dlq = DeadLetterQueue(max_size=10)
 
-        command1 = TestCommand(input=TestInput(value="first"))
-        command2 = TestCommand(input=TestInput(value="second"))
+        command1 = TestCommand(request=TestInput(value="first"))
+        command2 = TestCommand(request=TestInput(value="second"))
 
         dlq.add(command1, ValueError("Error 1"))
         dlq.add(command2, ValueError("Error 2"))
 
         entry = dlq.pop()
-        assert entry.command.input.value == "first"
+        assert entry.command.request.value == "first"
         assert len(dlq) == 1
 
     def test_clear(self):
@@ -298,7 +297,7 @@ class TestDeadLetterQueue:
         dlq = DeadLetterQueue(max_size=10)
 
         for i in range(5):
-            dlq.add(TestCommand(input=TestInput(value=str(i))), ValueError(""))
+            dlq.add(TestCommand(request=TestInput(value=str(i))), ValueError(""))
 
         count = dlq.clear()
         assert count == 5
@@ -312,7 +311,7 @@ class TestDeadLetterQueue:
             added_entries.append(entry)
 
         dlq = DeadLetterQueue(max_size=10, on_add=on_add)
-        command = TestCommand(input=TestInput(value="test"))
+        command = TestCommand(request=TestInput(value="test"))
         dlq.add(command, ValueError("Error"))
 
         assert len(added_entries) == 1
@@ -386,12 +385,12 @@ class TestHostWithResilience:
         host.register(FailingModule())
 
         # First command should succeed
-        command1 = TestCommand(input=TestInput(value="test"))
-        host.dispatch(command1)
-        assert command1.handled
+        command1 = TestCommand(request=TestInput(value="test"))
+        response1 = host.dispatch(command1)
+        assert response1 is not None
 
         # Second command should be rate limited
-        command2 = TestCommand(input=TestInput(value="test2"))
+        command2 = TestCommand(request=TestInput(value="test2"))
         with pytest.raises(RateLimitExceeded):
             host.dispatch(command2)
 
@@ -409,11 +408,11 @@ class TestHostWithResilience:
 
         # Cause failures to open circuit
         for _ in range(2):
-            command = TestCommand(input=TestInput(should_fail=True))
+            command = TestCommand(request=TestInput(should_fail=True))
             host.dispatch(command)
 
         # Next request should be rejected by circuit breaker
-        command = TestCommand(input=TestInput(value="test"))
+        command = TestCommand(request=TestInput(value="test"))
         with pytest.raises(CircuitBreakerOpen):
             host.dispatch(command)
 
@@ -430,7 +429,7 @@ class TestHostWithResilience:
         host = ModuleHost(config=config)
         host.register(FailingModule())
 
-        command = TestCommand(input=TestInput(should_fail=True))
+        command = TestCommand(request=TestInput(should_fail=True))
         host.dispatch(command)
 
         assert len(dlq) == 1
@@ -447,7 +446,7 @@ class TestHostWithResilience:
         mod = FailingModule()
         host.register(mod)
 
-        command = TestCommand(input=TestInput(should_fail=True))
+        command = TestCommand(request=TestInput(should_fail=True))
         host.dispatch(command)
 
         # Should have been called 3 times (1 + 2 retries)

@@ -3,7 +3,8 @@ Core interfaces for the PyModules command-dispatch system.
 
 Commands are typed in-process requests with a CommandRequest payload and a
 CommandResponse. They flow through the ModuleHost and are dispatched to
-exactly one claiming Module.
+exactly one claiming Module. The claiming Module **returns** its
+CommandResponse; the Command itself is no longer mutated to carry the result.
 """
 
 from dataclasses import dataclass, field
@@ -42,26 +43,30 @@ class CommandResponse:
     pass
 
 
-# Type variables for generic Command (single letters are conventional for TypeVars)
-I = TypeVar("I", bound=CommandRequest)  # noqa: E741
-O = TypeVar("O", bound=CommandResponse)  # noqa: E741
+# Type variables for generic Command. ``Req`` is the request payload type
+# carried into the handler; ``Resp`` is the response type the handler returns
+# (propagated to ``ModuleHost.dispatch``'s return annotation).
+Req = TypeVar("Req", bound=CommandRequest)
+Resp = TypeVar("Resp", bound=CommandResponse)
 
 
 @dataclass
-class Command(Generic[I, O]):
+class Command(Generic[Req, Resp]):
     """
     A command that can be dispatched through a ModuleHost.
 
-    Commands carry a typed request into the claiming Module and (today)
-    receive a typed response set on ``output``. The ``handled`` flag
-    indicates whether a Module successfully processed the command.
+    Commands carry a typed request into the claiming Module. The Module
+    **returns** its typed response from the decorated handler; the Command
+    is not mutated.
 
     Attributes:
         name: Unique identifier for this command type (e.g., "com.example.greet")
-        input: Request data passed to the handler
-        output: Response data set by the handler
-        handled: True if a Module successfully handled this command
+        request: Request data passed to the handler
         meta: Additional metadata that can be passed between Modules
+
+    The ``Resp`` type parameter exists for static typing only: it lets
+    ``ModuleHost.dispatch(cmd: Command[Req, Resp]) -> Resp`` propagate the
+    response type to the caller. There is no runtime ``response`` field.
 
     Example:
         @dataclass
@@ -77,9 +82,7 @@ class Command(Generic[I, O]):
     """
 
     name: str = ""
-    input: I | None = None
-    output: O | None = None
-    handled: bool = False
+    request: Req | None = None
     meta: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

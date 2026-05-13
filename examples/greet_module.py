@@ -40,18 +40,17 @@ class GreeterModule(Module):
         host = ModuleHost()
         host.register(GreeterModule())
 
-        command = GreetCommand(input=GreetInput(name="Alice"))
-        host.dispatch(command)
-        print(command.output.message)  # "Hello, Alice!"
+        command = GreetCommand(request=GreetInput(name="Alice"))
+        response = host.dispatch(command)
+        print(response.message)  # "Hello, Alice!"
     """
 
     @handles(GreetCommand)
-    def greet(self, command: GreetCommand) -> None:
-        inp = command.input
-        if inp.formal:
-            message = f"Good day, {inp.name}. How may I assist you?"
+    def greet(self, command: GreetCommand) -> GreetOutput:
+        req = command.request
+        if req.formal:
+            message = f"Good day, {req.name}. How may I assist you?"
         else:
-            message = f"Hello, {inp.name}!"
+            message = f"Hello, {req.name}!"
 
-        command.output = GreetOutput(message=message)
-        command.handled = True
+        return GreetOutput(message=message)

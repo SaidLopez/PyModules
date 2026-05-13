@@ -28,7 +28,6 @@ from .host import ModuleHost
 from .interfaces import Command, CommandRequest, CommandResponse
 from .logging import configure_logging, get_logger
 from .module import Module, ModuleMetadata, handles, module
-from .protocols import AsyncCommandHandler, CommandHandler, CommandLike
 from .resilience import (
     CircuitBreaker,
     CircuitBreakerOpen,
@@ -59,10 +58,6 @@ __all__ = [
     "Command",
     "CommandRequest",
     "CommandResponse",
-    # Protocols (structural typing)
-    "CommandLike",
-    "CommandHandler",
-    "AsyncCommandHandler",
     # Module system
     "Module",
     "module",

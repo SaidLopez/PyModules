@@ -45,22 +45,20 @@ class StressModule(Module):
         self._lock = threading.Lock()
 
     @handles(StressCommand)
-    def handle_stress(self, command: StressCommand) -> None:
+    def handle_stress(self, command: StressCommand) -> StressOutput:
         with self._lock:
             self.call_count += 1
         # Simulate some work
-        result = command.input.value * 2
-        command.output = StressOutput(result=result)
-        command.handled = True
+        result = command.request.value * 2
+        return StressOutput(result=result)
 
 
 @module(name="SlowModule")
 class SlowModule(Module):
     @handles(StressCommand)
-    def handle_stress(self, command: StressCommand) -> None:
+    def handle_stress(self, command: StressCommand) -> StressOutput:
         time.sleep(0.01)  # 10ms delay
-        command.output = StressOutput(result=command.input.value)
-        command.handled = True
+        return StressOutput(result=command.request.value)
 
 
 @pytest.mark.slow
@@ -75,10 +73,10 @@ class TestConcurrentDispatch:
 
         num_commands = 1000
         for i in range(num_commands):
-            command = StressCommand(input=StressInput(value=i))
-            host.dispatch(command)
-            assert command.handled
-            assert command.output.result == i * 2
+            command = StressCommand(request=StressInput(value=i))
+            response = host.dispatch(command)
+            assert response is not None
+            assert response.result == i * 2
 
         assert mod.call_count == num_commands
 
@@ -93,9 +91,8 @@ class TestConcurrentDispatch:
         results = []
 
         def dispatch_command(value):
-            command = StressCommand(input=StressInput(value=value))
-            host.dispatch(command)
-            return command
+            command = StressCommand(request=StressInput(value=value))
+            return host.dispatch(command)
 
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = [executor.submit(dispatch_command, i) for i in range(num_commands)]
@@ -103,7 +100,7 @@ class TestConcurrentDispatch:
                 results.append(future.result())
 
         assert len(results) == num_commands
-        assert all(c.handled for c in results)
+        assert all(r is not None for r in results)
         assert mod.call_count == num_commands
 
     def test_async_commands_concurrent(self):
@@ -117,7 +114,7 @@ class TestConcurrentDispatch:
         async def dispatch_many():
             tasks = []
             for i in range(50):
-                command = StressCommand(input=StressInput(value=i))
+                command = StressCommand(request=StressInput(value=i))
                 tasks.append(host.dispatch_async(command))
 
             results = await asyncio.gather(*tasks)
@@ -125,7 +122,7 @@ class TestConcurrentDispatch:
 
         results = asyncio.run(dispatch_many())
         assert len(results) == 50
-        assert all(c.handled for c in results)
+        assert all(r is not None for r in results)
 
 
 @pytest.mark.slow
@@ -153,9 +150,9 @@ class TestManyModules:
         start = time.time()
         num_commands = 100
         for i in range(num_commands):
-            command = StressCommand(input=StressInput(value=i))
-            host.dispatch(command)
-            assert command.handled
+            command = StressCommand(request=StressInput(value=i))
+            response = host.dispatch(command)
+            assert response is not None
 
         elapsed = time.time() - start
         # Should complete in reasonable time (< 1 second)
@@ -178,14 +175,14 @@ class TestResourceCleanup:
         async def run_and_shutdown():
             # Start commands
             tasks = [
-                host.dispatch_async(StressCommand(input=StressInput(value=i))) for i in range(5)
+                host.dispatch_async(StressCommand(request=StressInput(value=i))) for i in range(5)
             ]
             # Wait for all
             results = await asyncio.gather(*tasks)
             return results
 
         results = asyncio.run(run_and_shutdown())
-        assert all(c.handled for c in results)
+        assert all(r is not None for r in results)
 
         # Shutdown should complete without error
         host.shutdown(wait=True)
@@ -198,15 +195,15 @@ class TestResourceCleanup:
         @module(name="TrackingModule")
         class TrackingModule(Module):
             @handles(StressCommand)
-            def track(self, command: StressCommand) -> None:
+            def track(self, command: StressCommand) -> StressOutput:
                 # Check commands_in_progress during handling
                 tracking.append(len(host.commands_in_progress))
-                command.handled = True
+                return StressOutput()
 
         host.register(TrackingModule())
 
         for i in range(10):
-            command = StressCommand(input=StressInput(value=i))
+            command = StressCommand(request=StressInput(value=i))
             host.dispatch(command)
 
         # During each handle, there should be exactly 1 command in progress

@@ -41,10 +41,9 @@ class SampleModule(Module):
         self.handle_count = 0
 
     @handles(SampleCommand)
-    def handle_sample(self, command: SampleCommand) -> None:
+    def handle_sample(self, command: SampleCommand) -> SampleOutput:
         self.handle_count += 1
-        command.output = SampleOutput(result=f"processed: {command.input.value}")
-        command.handled = True
+        return SampleOutput(result=f"processed: {command.request.value}")
 
 
 class UnhandledCommand(Command[SampleInput, SampleOutput]):
@@ -58,23 +57,24 @@ class TestCommandCreation:
     """Tests for Command, CommandRequest, CommandResponse creation."""
 
     def test_create_command_request(self):
-        inp = SampleInput(value="hello")
-        assert inp.value == "hello"
+        req = SampleInput(value="hello")
+        assert req.value == "hello"
 
     def test_create_command_response(self):
         out = SampleOutput(result="world")
         assert out.result == "world"
 
     def test_create_command(self):
-        command = SampleCommand(input=SampleInput(value="test"))
+        command = SampleCommand(request=SampleInput(value="test"))
         assert command.name == "test.command"
-        assert command.input.value == "test"
-        assert command.output is None
-        assert command.handled is False
+        assert command.request.value == "test"
         assert command.meta == {}
+        # The dropped fields are gone:
+        assert not hasattr(command, "output")
+        assert not hasattr(command, "handled")
 
     def test_command_meta(self):
-        command = SampleCommand(input=SampleInput(value="test"), meta={"key": "value"})
+        command = SampleCommand(request=SampleInput(value="test"), meta={"key": "value"})
         assert command.meta["key"] == "value"
 
 
@@ -116,12 +116,11 @@ class TestModuleHostClass:
         mod = SampleModule()
         host.register(mod)
 
-        command = SampleCommand(input=SampleInput(value="hello"))
-        result = host.dispatch(command)
+        command = SampleCommand(request=SampleInput(value="hello"))
+        response = host.dispatch(command)
 
-        assert result is command
-        assert command.handled is True
-        assert command.output.result == "processed: hello"
+        assert isinstance(response, SampleOutput)
+        assert response.result == "processed: hello"
         assert mod.handle_count == 1
 
     def test_unhandled_command(self):
@@ -129,12 +128,11 @@ class TestModuleHostClass:
         mod = SampleModule()
         host.register(mod)
 
-        command = UnhandledCommand(input=SampleInput(value="test"))
-        result = host.dispatch(command)
+        command = UnhandledCommand(request=SampleInput(value="test"))
+        response = host.dispatch(command)
 
-        assert result is command
-        assert command.handled is False
-        assert command.output is None
+        # Unmatched dispatch silently returns None (transitional; raises in 1.0).
+        assert response is None
 
     def test_host_can_handle_reflects_dispatch_table(self):
         """host.can_handle returns True for claimed Command classes."""
@@ -142,8 +140,8 @@ class TestModuleHostClass:
         mod = SampleModule()
         host.register(mod)
 
-        assert host.can_handle(SampleCommand(input=SampleInput())) is True
-        assert host.can_handle(UnhandledCommand(input=SampleInput())) is False
+        assert host.can_handle(SampleCommand(request=SampleInput())) is True
+        assert host.can_handle(UnhandledCommand(request=SampleInput())) is False
 
     def test_get_module_by_type(self):
         host = ModuleHost()
@@ -192,7 +190,7 @@ class TestDuplicateClaimGuard:
         host.register(mod1)
         host.register(mod2, override=True)
 
-        command = SampleCommand(input=SampleInput(value="test"))
+        command = SampleCommand(request=SampleInput(value="test"))
         host.dispatch(command)
 
         # The second module wins after override.
@@ -217,11 +215,11 @@ class TestDuplicateClaimGuard:
         host.register(mod)
 
         # Simulate a module dispatching a command
-        command = SampleCommand(input=SampleInput(value="from-module"))
-        mod.host.dispatch(command)
+        command = SampleCommand(request=SampleInput(value="from-module"))
+        response = mod.host.dispatch(command)
 
-        assert command.handled is True
-        assert command.output.result == "processed: from-module"
+        assert isinstance(response, SampleOutput)
+        assert response.result == "processed: from-module"
 
 
 @pytest.mark.asyncio
@@ -233,9 +231,8 @@ class TestAsyncDispatch:
         mod = SampleModule()
         host.register(mod)
 
-        command = SampleCommand(input=SampleInput(value="async-test"))
-        result = await host.dispatch_async(command)
+        command = SampleCommand(request=SampleInput(value="async-test"))
+        response = await host.dispatch_async(command)
 
-        assert result is command
-        assert command.handled is True
-        assert command.output.result == "processed: async-test"
+        assert isinstance(response, SampleOutput)
+        assert response.result == "processed: async-test"

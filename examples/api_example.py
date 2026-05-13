@@ -179,7 +179,7 @@ class ProductModule(Module):
     """Module that handles all product-related commands."""
 
     @handles(CreateProduct)
-    async def create_product(self, command: CreateProduct) -> None:
+    async def create_product(self, command: CreateProduct) -> CreateProductOutput:
         """Handle product creation."""
         global _next_id
 
@@ -188,52 +188,49 @@ class ProductModule(Module):
 
         product = {
             "id": product_id,
-            "name": command.input.name,
-            "price": command.input.price,
-            "description": command.input.description,
+            "name": command.request.name,
+            "price": command.request.price,
+            "description": command.request.description,
         }
         _products[product_id] = product
 
-        command.output = CreateProductOutput(
+        return CreateProductOutput(
             id=product_id,
             name=product["name"],
             price=product["price"],
         )
-        command.handled = True
 
     @handles(GetProduct)
-    async def get_product(self, command: GetProduct) -> None:
+    async def get_product(self, command: GetProduct) -> GetProductOutput:
         """Handle getting a single product."""
-        product = _products.get(command.input.product_id)
+        product = _products.get(command.request.product_id)
         if not product:
-            raise ValueError(f"Product {command.input.product_id} not found")
+            raise ValueError(f"Product {command.request.product_id} not found")
 
-        command.output = GetProductOutput(
+        return GetProductOutput(
             id=product["id"],
             name=product["name"],
             price=product["price"],
             description=product["description"],
         )
-        command.handled = True
 
     @handles(ListProducts)
-    async def list_products(self, command: ListProducts) -> None:
+    async def list_products(self, command: ListProducts) -> ListProductsOutput:
         """Handle product listing."""
         all_products = list(_products.values())
-        start = command.input.offset
-        end = start + command.input.limit
+        start = command.request.offset
+        end = start + command.request.limit
         page = all_products[start:end]
 
-        command.output = ListProductsOutput(
+        return ListProductsOutput(
             products=page,
             total=len(all_products),
         )
-        command.handled = True
 
     @handles(SearchProducts)
-    async def search_products(self, command: SearchProducts) -> None:
+    async def search_products(self, command: SearchProducts) -> SearchProductsOutput:
         """Handle product search with name and price filters."""
-        query = command.input.query.lower()
+        query = command.request.query.lower()
         results = []
 
         for product in _products.values():
@@ -242,18 +239,17 @@ class ProductModule(Module):
                 continue
 
             # Price filters
-            if command.input.min_price and product["price"] < command.input.min_price:
+            if command.request.min_price and product["price"] < command.request.min_price:
                 continue
-            if command.input.max_price and product["price"] > command.input.max_price:
+            if command.request.max_price and product["price"] > command.request.max_price:
                 continue
 
             results.append(product)
 
-        command.output = SearchProductsOutput(
+        return SearchProductsOutput(
             products=results,
             total=len(results),
         )
-        command.handled = True
 
 
 # =============================================================================

@@ -122,9 +122,9 @@ api.add_command_endpoint(
 @app.post("/greet-formal", tags=["Greetings"])
 async def greet_formal(name: str = "Guest"):
     """Manual endpoint showing direct command dispatch with formal greeting."""
-    command = GreetCommand(input=GreetInput(name=name, formal=True))
-    await api.dispatch(command)
-    return {"message": command.output.message, "formal": True}
+    command = GreetCommand(request=GreetInput(name=name, formal=True))
+    response = await api.dispatch(command)
+    return {"message": response.message, "formal": True}
 
 
 @app.get("/modules", tags=["Info"])

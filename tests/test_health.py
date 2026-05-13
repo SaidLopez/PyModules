@@ -40,9 +40,8 @@ class HealthCommand(Command[HealthInput, HealthOutput]):
 @module(name="HealthModule")
 class HealthModule(Module):
     @handles(HealthCommand)
-    def handle_health(self, command: HealthCommand) -> None:
-        command.output = HealthOutput(result="healthy")
-        command.handled = True
+    def handle_health(self, command: HealthCommand) -> HealthOutput:
+        return HealthOutput(result="healthy")
 
 
 class TestHealthCheckResult:

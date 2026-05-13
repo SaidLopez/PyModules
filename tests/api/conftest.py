@@ -109,28 +109,25 @@ def sample_module(sample_commands):
     class UserModule(Module):
         @handles(CreateUser)
         async def create_user(self, command):
-            command.output = sample_commands["CreateUserOutput"](
+            return sample_commands["CreateUserOutput"](
                 id="123",
-                name=command.input.name,
-                email=command.input.email,
+                name=command.request.name,
+                email=command.request.email,
             )
-            command.handled = True
 
         @handles(GetUser)
         async def get_user(self, command):
-            command.output = sample_commands["GetUserOutput"](
-                id=command.input.user_id,
+            return sample_commands["GetUserOutput"](
+                id=command.request.user_id,
                 name="Test User",
                 email="test@example.com",
             )
-            command.handled = True
 
         @handles(ListUsers)
         async def list_users(self, command):
-            command.output = sample_commands["ListUsersOutput"](
+            return sample_commands["ListUsersOutput"](
                 users=[{"id": "1", "name": "User 1"}],
                 total=1,
             )
-            command.handled = True
 
     return UserModule()

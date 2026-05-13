@@ -58,7 +58,7 @@ class LoggingModule(Module):
 
     Example:
         # In any other module's handle() method:
-        log_command = LoggingCommand(input=LoggingInput(
+        log_command = LoggingCommand(request=LoggingInput(
             level=LogLevel.INFO,
             message="User {} logged in",
             args=["john"]
@@ -71,15 +71,14 @@ class LoggingModule(Module):
         self.output = output or sys.stdout
 
     @handles(LoggingCommand)
-    def log(self, command: LoggingCommand) -> None:
-        inp = command.input
-        message = inp.message
-        if inp.args:
-            message = message.format(*inp.args)
+    def log(self, command: LoggingCommand) -> LoggingOutput:
+        req = command.request
+        message = req.message
+        if req.args:
+            message = message.format(*req.args)
 
-        log_line = f"[{inp.level.value}] {message}\n"
+        log_line = f"[{req.level.value}] {message}\n"
         self.output.write(log_line)
         self.output.flush()
 
-        command.output = LoggingOutput(logged=True)
-        command.handled = True
+        return LoggingOutput(logged=True)

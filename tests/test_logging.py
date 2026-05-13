@@ -36,9 +36,8 @@ class LogCommand(Command[LogInput, LogOutput]):
 @module(name="LogTestModule")
 class LogTestModule(Module):
     @handles(LogCommand)
-    def handle_log(self, command: LogCommand) -> None:
-        command.output = LogOutput(result=f"logged: {command.input.value}")
-        command.handled = True
+    def handle_log(self, command: LogCommand) -> LogOutput:
+        return LogOutput(result=f"logged: {command.request.value}")
 
 
 class TestConfigureLogging:
@@ -129,7 +128,7 @@ class TestHostLogging:
             host = ModuleHost(config=config)
             host.register(LogTestModule())
 
-            command = LogCommand(input=LogInput(value="test"))
+            command = LogCommand(request=LogInput(value="test"))
             host.dispatch(command)
 
         assert any("Dispatching command" in record.message for record in caplog.records)

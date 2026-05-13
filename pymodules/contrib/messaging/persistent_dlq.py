@@ -77,9 +77,7 @@ def serialize_entry(entry: DeadLetterEntry) -> dict[str, Any]:
     return {
         "command": {
             "name": entry.command.name,
-            "input": entry.command.input.__dict__ if entry.command.input else None,
-            "output": entry.command.output.__dict__ if entry.command.output else None,
-            "handled": entry.command.handled,
+            "request": entry.command.request.__dict__ if entry.command.request else None,
             "meta": entry.command.meta,
         },
         "error": str(entry.error),
@@ -92,31 +90,22 @@ def serialize_entry(entry: DeadLetterEntry) -> dict[str, Any]:
 
 def deserialize_entry(data: dict[str, Any]) -> DeadLetterEntry:
     """Deserialize a dictionary to a DeadLetterEntry."""
-    from ...interfaces import Command, CommandRequest, CommandResponse
+    from ...interfaces import Command, CommandRequest
 
     command_data = data["command"]
 
-    # Reconstruct input/output
-    input_data = command_data.get("input")
-    output_data = command_data.get("output")
+    # Reconstruct request
+    request_data = command_data.get("request")
 
-    input_obj = None
-    if input_data:
-        input_obj = CommandRequest()
-        for k, v in input_data.items():
-            setattr(input_obj, k, v)
-
-    output_obj = None
-    if output_data:
-        output_obj = CommandResponse()
-        for k, v in output_data.items():
-            setattr(output_obj, k, v)
+    request_obj = None
+    if request_data:
+        request_obj = CommandRequest()
+        for k, v in request_data.items():
+            setattr(request_obj, k, v)
 
     command = Command(
         name=command_data["name"],
-        input=input_obj,
-        output=output_obj,
-        handled=command_data.get("handled", False),
+        request=request_obj,
         meta=command_data.get("meta", {}),
     )
 
@@ -402,16 +391,16 @@ class PersistentDeadLetterQueue:
             processed += 1
 
             try:
-                # Reset command state
-                entry.command.handled = False
-                entry.command.output = None
-
-                # Handle command (sync or async)
+                # Handle command (sync or async). ``response`` is the
+                # handler's return value, or ``None`` if no module claims
+                # the command class.
                 result = handler(entry.command)
                 if asyncio.iscoroutine(result):
-                    await result
+                    response = await result
+                else:
+                    response = result
 
-                if entry.command.handled:
+                if response is not None:
                     successful += 1
                     logger.info(
                         "Successfully reprocessed command %s from DLQ",

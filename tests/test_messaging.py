@@ -56,9 +56,9 @@ class ConsumerModule(Module):
         self.handled_commands: list[Command] = []
 
     @handles(ExternalEvent)
-    def handle_external(self, command: ExternalEvent) -> None:
+    def handle_external(self, command: ExternalEvent) -> CommandResponse:
         self.handled_commands.append(command)
-        command.handled = True
+        return CommandResponse()
 
 
 class MockBroker(MessageBroker):
@@ -437,27 +437,27 @@ class TestExternalEvent:
 
     def test_external_event_input(self) -> None:
         """ExternalEventInput contains message data."""
-        input_data = ExternalEventInput(
+        request_data = ExternalEventInput(
             data={"user_id": 123},
             headers={"trace_id": "abc"},
             source_stream="users",
             message_id="msg-123",
         )
 
-        assert input_data.data == {"user_id": 123}
-        assert input_data.headers == {"trace_id": "abc"}
-        assert input_data.source_stream == "users"
-        assert input_data.message_id == "msg-123"
+        assert request_data.data == {"user_id": 123}
+        assert request_data.headers == {"trace_id": "abc"}
+        assert request_data.source_stream == "users"
+        assert request_data.message_id == "msg-123"
 
     def test_external_event_creation(self) -> None:
-        """ExternalEvent can be created with input."""
+        """ExternalEvent can be created with a typed request."""
         cmd = ExternalEvent(
             name="user.created",
-            input=ExternalEventInput(data={"user": "test"}),
+            request=ExternalEventInput(data={"user": "test"}),
         )
 
         assert cmd.name == "user.created"
-        assert cmd.input.data == {"user": "test"}
+        assert cmd.request.data == {"user": "test"}
 
 
 # =============================================================================

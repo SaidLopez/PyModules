@@ -12,7 +12,6 @@ from collections.abc import Callable
 from typing import Annotated, Any, TypeVar
 
 from fastapi import APIRouter, Body, HTTPException, Path, Request
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, create_model
 
 from pymodules import Command, CommandRequest, ModuleHost
@@ -358,17 +357,17 @@ async def _dispatch_command(
                     raise HTTPException(status_code=400, detail=f"Invalid UUID: {path_id}") from e
         input_data[id_param_name] = path_id
 
-    # Create input instance
+    # Create request instance
     try:
-        input_instance = input_class(**input_data)
+        request_instance = input_class(**input_data)
     except TypeError as e:
         raise HTTPException(status_code=400, detail=f"Invalid input: {e}") from e
 
     # Create and dispatch command
-    command = command_class(input=input_instance)
+    command = command_class(request=request_instance)
 
     try:
-        await host.dispatch_async(command)
+        response = await host.dispatch_async(command)
     except APIError:
         raise
     except Exception as e:
@@ -378,13 +377,11 @@ async def _dispatch_command(
             raise NotFoundError(command_class.__name__.replace("Command", ""), str(path_id)) from e
         raise HTTPException(status_code=500, detail=str(e)) from e
 
-    if not command.handled:
+    if response is None:
+        # No handler claimed the command (transitional silent no-op).
         raise HTTPException(status_code=501, detail=f"No handler for command: {command.name}")
 
-    if command.output is None:
-        return JSONResponse(content={"success": True}, status_code=200)
-
-    # Convert output to dict
-    if dataclasses.is_dataclass(command.output) and not isinstance(command.output, type):
-        return dataclasses.asdict(command.output)
-    return command.output
+    # Convert response to dict
+    if dataclasses.is_dataclass(response) and not isinstance(response, type):
+        return dataclasses.asdict(response)
+    return response

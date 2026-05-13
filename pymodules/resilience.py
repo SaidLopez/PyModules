@@ -497,14 +497,16 @@ class DeadLetterQueue:
 
     def reprocess(
         self,
-        handler: Callable[["Command"], "Command"],
+        handler: Callable[["Command"], Any],
         max_entries: int | None = None,
     ) -> tuple[int, int]:
         """
         Reprocess entries from the queue.
 
         Args:
-            handler: Function to handle commands (e.g., host.dispatch).
+            handler: Function to handle commands (e.g., host.dispatch). The
+                handler returns the response value or ``None`` if no module
+                claims the command.
             max_entries: Maximum entries to process (None = all).
 
         Returns:
@@ -524,13 +526,9 @@ class DeadLetterQueue:
 
             processed += 1
             try:
-                # Reset command state
-                entry.command.handled = False
-                entry.command.output = None
+                response = handler(entry.command)
 
-                handler(entry.command)
-
-                if entry.command.handled:
+                if response is not None:
                     successful += 1
                     resilience_logger.info(
                         "Successfully reprocessed command %s from DLQ",

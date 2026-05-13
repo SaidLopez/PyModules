@@ -9,17 +9,27 @@ registered Module's class at registration time and builds a
 There is no ``can_handle`` predicate. Routing is type-only. Conditional
 handling is expressed by splitting the Command into narrower classes or
 branching inside the handler body.
+
+Handlers **return** their typed CommandResponse. The host's
+``dispatch(cmd: Command[Req, Resp]) -> Resp`` returns that value.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
+
+from .interfaces import Command, CommandResponse
 
 if TYPE_CHECKING:
     from .host import ModuleHost
 
 
-F = TypeVar("F", bound=Callable[..., object])
+# TypeVar bound to the response type of the Command class passed to ``@handles``.
+# Used so that mypy can verify the decorated method's return type matches the
+# declared Command's Resp parameter (approximately — see decorator docstring).
+# Bound matches ``Command``'s own ``Resp`` bound from ``interfaces.py``.
+Resp = TypeVar("Resp", bound=CommandResponse)
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 # Marker attribute name written onto decorated methods by ``@handles``.
@@ -27,7 +37,9 @@ F = TypeVar("F", bound=Callable[..., object])
 HANDLES_ATTR = "__pymodules_handles__"
 
 
-def handles(*commands: type) -> Callable[[F], F]:
+def handles(
+    *commands: "type[Command[Any, Resp]]",
+) -> Callable[[Callable[..., Resp]], Callable[..., Resp]]:
     """
     Decorator marking a Module method as the handler for one or more Command classes.
 
@@ -35,20 +47,32 @@ def handles(*commands: type) -> Callable[[F], F]:
     function under ``__pymodules_handles__``. ``ModuleHost.register`` reads
     that marker to build the dispatch table.
 
+    The decorated method takes ``(self, command: C)`` and **returns** the
+    response value. ``ModuleHost.dispatch`` propagates that return value
+    as the dispatch result.
+
     Most usages claim a single Command class. ``@handles(CmdA, CmdB)`` is
-    permitted for the rare case of a method that handles multiple types.
+    permitted for the rare case of a method that handles multiple types;
+    in that case the response type is the common supertype of the claimed
+    Commands' ``Resp`` parameters (often ``CommandResponse``).
+
+    Typing note: the decorator's ``Resp`` TypeVar binds against the
+    ``Command[Any, Resp]`` argument(s) and flows to the decorated method's
+    return type. Multi-Command claims with heterogeneous response types
+    will resolve ``Resp`` to a common supertype rather than rejecting the
+    declaration — mypy does not enforce a strict per-Command response
+    match across a tuple of Command classes.
 
     Example:
         class GreeterModule(Module):
             @handles(GreetCommand)
-            def greet(self, command: GreetCommand) -> None:
-                command.output = GreetOutput(message=f"Hello, {command.input.name}!")
-                command.handled = True
+            def greet(self, command: GreetCommand) -> GreetResponse:
+                return GreetResponse(message=f"Hello, {command.request.name}!")
     """
     if not commands:
         raise TypeError("@handles requires at least one Command class")
 
-    def decorator(func: F) -> F:
+    def decorator(func: Callable[..., Resp]) -> Callable[..., Resp]:
         setattr(func, HANDLES_ATTR, tuple(commands))
         return func
 
@@ -89,18 +113,17 @@ class Module:
     Base class for command handler modules.
 
     Subclass this and decorate methods with ``@handles(CommandClass)`` to
-    claim Commands. Each module has access to its host via the ``host``
-    property, allowing it to dispatch commands to other modules.
+    claim Commands. Each decorated method takes the typed Command and
+    **returns** the typed CommandResponse. Each module has access to its
+    host via the ``host`` property, allowing it to dispatch commands to
+    other modules.
 
     Example:
         @module(name="Greeter", description="Handles greeting commands")
         class GreeterModule(Module):
             @handles(GreetCommand)
-            def greet(self, command: GreetCommand) -> None:
-                command.output = GreetOutput(
-                    message=f"Hello, {command.input.name}!"
-                )
-                command.handled = True
+            def greet(self, command: GreetCommand) -> GreetResponse:
+                return GreetResponse(message=f"Hello, {command.request.name}!")
     """
 
     _module_metadata: ModuleMetadata = ModuleMetadata()

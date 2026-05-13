@@ -31,21 +31,20 @@ def main():
 
     # Example 1: Simple greeting
     print("\n--- Example 1: Simple Greeting ---")
-    greet = GreetCommand(input=GreetInput(name="World"))
-    host.dispatch(greet)
-    print(f"Result: {greet.output.message}")
-    print(f"Handled: {greet.handled}")
+    greet = GreetCommand(request=GreetInput(name="World"))
+    greet_response = host.dispatch(greet)
+    print(f"Result: {greet_response.message}")
 
     # Example 2: Formal greeting
     print("\n--- Example 2: Formal Greeting ---")
-    formal_greet = GreetCommand(input=GreetInput(name="Dr. Smith", formal=True))
-    host.dispatch(formal_greet)
-    print(f"Result: {formal_greet.output.message}")
+    formal_greet = GreetCommand(request=GreetInput(name="Dr. Smith", formal=True))
+    formal_response = host.dispatch(formal_greet)
+    print(f"Result: {formal_response.message}")
 
     # Example 3: Logging (cross-cutting concern)
     print("\n--- Example 3: Logging Command ---")
     log = LoggingCommand(
-        input=LoggingInput(
+        request=LoggingInput(
             level=LogLevel.INFO,
             message="User {} performed action: {}",
             args=["alice", "login"],
@@ -61,16 +60,18 @@ def main():
     greeter = host.get_module_by_name("Greeter")
     if greeter and greeter.host:
         log_cmd = LoggingCommand(
-            input=LoggingInput(level=LogLevel.DEBUG, message="Greeter module is active")
+            request=LoggingInput(level=LogLevel.DEBUG, message="Greeter module is active")
         )
         greeter.host.dispatch(log_cmd)
 
     # Example 5: Calculator
     print("\n--- Example 5: Calculator ---")
-    calc = CalculatorCommand(input=CalculatorInput(a=1, b=2, operation="+"))
-    host.dispatch(calc)
+    calc = CalculatorCommand(request=CalculatorInput(a=1, b=2, operation="+"))
+    calc_response = host.dispatch(calc)
     calc_log_cmd = LoggingCommand(
-        input=LoggingInput(level=LogLevel.INFO, message=f"Calculator result: {calc.output.result}")
+        request=LoggingInput(
+            level=LogLevel.INFO, message=f"Calculator result: {calc_response.result}"
+        )
     )
     host.dispatch(calc_log_cmd)
 

@@ -125,7 +125,7 @@ class PyModulesAPI:
             self._health_check = HealthCheck(host=self.host, version=self.version)
         return self._health_check
 
-    async def dispatch(self, command: Command) -> Command:
+    async def dispatch(self, command: Command) -> Any:
         """
         Dispatch a command through the ModuleHost asynchronously.
 
@@ -133,19 +133,19 @@ class PyModulesAPI:
             command: The command to dispatch
 
         Returns:
-            The command with output set
+            The CommandResponse returned by the claiming Module.
 
         Raises:
             HTTPException: If no module handled the command
         """
-        await self.host.dispatch_async(command)
+        response = await self.host.dispatch_async(command)
 
-        if not command.handled:
+        if response is None:
             raise HTTPException(
                 status_code=404, detail=f"No module found to handle command: {command.name}"
             )
 
-        return command
+        return response
 
     def add_command_endpoint(
         self,
@@ -179,18 +179,18 @@ class PyModulesAPI:
 
         async def endpoint(request: Request, body: InputModel) -> Any:  # type: ignore
             # Convert Pydantic model back to dataclass
-            input_data = input_class(**body.model_dump())
-            command = command_class(input=input_data)
+            request_data = input_class(**body.model_dump())
+            command = command_class(request=request_data)
 
             # Add correlation ID from request if available
             if hasattr(request.state, "correlation_id"):
                 command.meta["correlation_id"] = request.state.correlation_id
 
-            await self.dispatch(command)
+            response = await self.dispatch(command)
 
-            if command.output and is_dataclass(command.output):
-                return asdict(command.output)
-            return {"handled": command.handled}
+            if response is not None and is_dataclass(response):
+                return asdict(response)
+            return {"handled": response is not None}
 
         app.add_api_route(
             path, endpoint, methods=[method], response_model=OutputModel, **route_kwargs
@@ -365,8 +365,8 @@ def command_endpoint(
 
     Example:
         @command_endpoint(GreetCommand, GreetRequest, "/greet")
-        async def greet_handler(command: GreetCommand):
-            return command.output
+        async def greet_handler(command: GreetCommand) -> GreetResponse:
+            return GreetResponse(...)
     """
 
     def decorator(func: Callable) -> Callable:
