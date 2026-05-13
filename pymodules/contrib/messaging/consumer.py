@@ -10,8 +10,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from ..interfaces import Event, EventInput, EventOutput
-from ..logging import get_logger
+from ...interfaces import Event, EventInput, EventOutput
+from ...logging import get_logger
 from .broker import ConsumeError, Message, MessageBroker
 
 if TYPE_CHECKING:

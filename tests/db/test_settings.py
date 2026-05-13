@@ -14,7 +14,7 @@ class TestDatabaseSettings:
         monkeypatch.setenv("PYMODULES_DB_POOL_SIZE", "10")
         monkeypatch.setenv("PYMODULES_DB_ECHO", "true")
 
-        from pymodules.db import DatabaseSettings
+        from pymodules.contrib.db import DatabaseSettings
 
         settings = DatabaseSettings()
 
@@ -31,7 +31,7 @@ class TestDatabaseSettings:
                 env_backup[key] = os.environ.pop(key)
 
         try:
-            from pymodules.db import DatabaseSettings
+            from pymodules.contrib.db import DatabaseSettings
 
             settings = DatabaseSettings()
 
@@ -51,7 +51,7 @@ class TestDatabaseSettings:
         # Set without prefix (should be ignored)
         monkeypatch.setenv("POOL_SIZE", "100")
 
-        from pymodules.db import DatabaseSettings
+        from pymodules.contrib.db import DatabaseSettings
 
         settings = DatabaseSettings()
 
@@ -66,7 +66,7 @@ class TestDatabaseSettings:
         monkeypatch.setenv("PYMODULES_DB_USER", "testuser")
         monkeypatch.setenv("PYMODULES_DB_PASSWORD", "testpass")
 
-        from pymodules.db import DatabaseSettings
+        from pymodules.contrib.db import DatabaseSettings
 
         settings = DatabaseSettings()
 
@@ -80,7 +80,7 @@ class TestDatabaseSettings:
         """DatabaseSettings should handle SQLite URLs."""
         monkeypatch.setenv("PYMODULES_DB_URL", "sqlite+aiosqlite:///./test.db")
 
-        from pymodules.db import DatabaseSettings
+        from pymodules.contrib.db import DatabaseSettings
 
         settings = DatabaseSettings()
 

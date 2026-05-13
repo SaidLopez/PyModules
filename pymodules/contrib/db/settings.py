@@ -39,7 +39,7 @@ class DatabaseSettings(BaseSettings):
         export PYMODULES_DB_PASSWORD="pass"
 
         # In code
-        from pymodules.db import DatabaseSettings
+        from pymodules.contrib.db import DatabaseSettings
         settings = DatabaseSettings()
         url = settings.get_url()
     """

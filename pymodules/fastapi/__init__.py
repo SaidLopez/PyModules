@@ -2,11 +2,12 @@
 FastAPI integration for PyModules.
 
 .. deprecated:: 0.4.0
-    This module is deprecated. Use ``pymodules.api`` instead for the new
-    auto-discovery router and ``pymodules.api.auth`` for authentication.
+    This module is deprecated. Use ``pymodules.contrib.api`` instead for the
+    new auto-discovery router and ``pymodules.contrib.api.auth`` for
+    authentication.
 
 The ``pymodules.fastapi`` module provides backward compatibility but new code
-should use the improved ``pymodules.api`` module which offers:
+should use the improved ``pymodules.contrib.api`` module which offers:
 - ModuleRouter with auto-discovery
 - Convention-based REST routing
 - Pluggable authentication
@@ -17,12 +18,19 @@ Example migration:
     from pymodules.fastapi import PyModulesAPI
 
     # New way (recommended)
-    from pymodules.api import ModuleRouter
+    from pymodules.contrib.api import ModuleRouter
 """
 
 import warnings
 
-from .integration import PyModulesAPI, event_endpoint
+warnings.warn(
+    "pymodules.fastapi is deprecated and will be removed in a future release. "
+    "Use pymodules.contrib.api instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+from .integration import PyModulesAPI, event_endpoint  # noqa: E402
 
 __all__ = [
     # Legacy exports
@@ -41,7 +49,7 @@ __all__ = [
 
 def __getattr__(name: str):
     """Provide deprecation warnings when accessing new API components via old path."""
-    # Re-export from pymodules.api with deprecation warning
+    # Re-export from pymodules.contrib.api with deprecation warning
     if name in (
         "ModuleRouter",
         "EventDiscovery",
@@ -53,11 +61,11 @@ def __getattr__(name: str):
     ):
         warnings.warn(
             f"Importing {name} from pymodules.fastapi is deprecated. "
-            f"Use 'from pymodules.api import {name}' instead.",
+            f"Use 'from pymodules.contrib.api import {name}' instead.",
             DeprecationWarning,
             stacklevel=2,
         )
-        from pymodules import api
+        from pymodules.contrib import api
 
         return getattr(api, name)
 

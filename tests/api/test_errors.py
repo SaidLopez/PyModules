@@ -8,7 +8,7 @@ class TestAPIError:
 
     def test_has_message(self) -> None:
         """APIError should have a message."""
-        from pymodules.api import APIError
+        from pymodules.contrib.api import APIError
 
         error = APIError(message="Test error")
 
@@ -16,7 +16,7 @@ class TestAPIError:
 
     def test_has_code(self) -> None:
         """APIError should have an error code."""
-        from pymodules.api import APIError, ErrorCode
+        from pymodules.contrib.api import APIError, ErrorCode
 
         error = APIError(message="Test", code=ErrorCode.VALIDATION_ERROR)
 
@@ -24,7 +24,7 @@ class TestAPIError:
 
     def test_has_status_code(self) -> None:
         """APIError should have an HTTP status code."""
-        from pymodules.api import APIError
+        from pymodules.contrib.api import APIError
 
         error = APIError(message="Test", status_code=400)
 
@@ -36,7 +36,7 @@ class TestSpecificErrors:
 
     def test_not_found_error(self) -> None:
         """NotFoundError should have 404 status."""
-        from pymodules.api import NotFoundError
+        from pymodules.contrib.api import NotFoundError
 
         error = NotFoundError(resource_type="User", resource_id="123")
 
@@ -46,7 +46,7 @@ class TestSpecificErrors:
 
     def test_validation_error(self) -> None:
         """ValidationError should have 422 status."""
-        from pymodules.api import ValidationError
+        from pymodules.contrib.api import ValidationError
 
         error = ValidationError(message="Invalid input", details={"field": "error"})
 
@@ -55,7 +55,7 @@ class TestSpecificErrors:
 
     def test_authentication_error(self) -> None:
         """AuthenticationError should have 401 status."""
-        from pymodules.api import AuthenticationError
+        from pymodules.contrib.api import AuthenticationError
 
         error = AuthenticationError(message="Invalid token")
 
@@ -63,7 +63,7 @@ class TestSpecificErrors:
 
     def test_authorization_error(self) -> None:
         """AuthorizationError should have 403 status."""
-        from pymodules.api import AuthorizationError
+        from pymodules.contrib.api import AuthorizationError
 
         error = AuthorizationError(message="Permission denied", required_permissions=["admin"])
 
@@ -76,7 +76,7 @@ class TestErrorHandlers:
 
     def test_register_error_handlers(self, app) -> None:
         """register_error_handlers should add handlers to app."""
-        from pymodules.api import register_error_handlers
+        from pymodules.contrib.api import register_error_handlers
 
         initial_handlers = len(app.exception_handlers)
         register_error_handlers(app)
@@ -88,7 +88,7 @@ class TestErrorHandlers:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import APIError, register_error_handlers
+        from pymodules.contrib.api import APIError, register_error_handlers
 
         app = FastAPI()
         register_error_handlers(app)
@@ -109,7 +109,7 @@ class TestErrorHandlers:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import NotFoundError, register_error_handlers
+        from pymodules.contrib.api import NotFoundError, register_error_handlers
 
         app = FastAPI()
         register_error_handlers(app)
@@ -128,7 +128,7 @@ class TestErrorHandlers:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import ValidationError, register_error_handlers
+        from pymodules.contrib.api import ValidationError, register_error_handlers
 
         app = FastAPI()
         register_error_handlers(app)
@@ -147,7 +147,7 @@ class TestErrorHandlers:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import AuthenticationError, register_error_handlers
+        from pymodules.contrib.api import AuthenticationError, register_error_handlers
 
         app = FastAPI()
         register_error_handlers(app)

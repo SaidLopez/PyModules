@@ -22,8 +22,8 @@ from sqlalchemy import Column, String
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
-from pymodules.api import ModuleRouter, api_endpoint, register_error_handlers
-from pymodules.db import Base, BaseRepository, SoftDeleteMixin, TimestampMixin, UUIDMixin
+from pymodules.contrib.api import ModuleRouter, api_endpoint, register_error_handlers
+from pymodules.contrib.db import Base, BaseRepository, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 
 # =============================================================================

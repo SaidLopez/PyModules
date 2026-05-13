@@ -11,8 +11,8 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from ..logging import get_logger
-from ..resilience import DeadLetterEntry
+from ...logging import get_logger
+from ...resilience import DeadLetterEntry
 
 if TYPE_CHECKING:
     from collections.abc import Callable

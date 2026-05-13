@@ -5,7 +5,7 @@ Provides service discovery integration for microservices deployments.
 Supports Kubernetes DNS-based discovery (zero deps) and Consul (optional).
 
 Example:
-    from pymodules.discovery import DNSServiceRegistry, ServiceInstance
+    from pymodules.contrib.discovery import DNSServiceRegistry, ServiceInstance
 
     # Kubernetes DNS-based discovery
     registry = DNSServiceRegistry(

@@ -9,7 +9,7 @@ This module provides API utilities including:
 
 Example:
     from pymodules import ModuleHost
-    from pymodules.api import ModuleRouter, register_error_handlers
+    from pymodules.contrib.api import ModuleRouter, register_error_handlers
     from fastapi import FastAPI
 
     host = ModuleHost()
@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 from pymodules._imports import require_optional_dependency
 
 # Check for FastAPI dependency at import time
-require_optional_dependency("fastapi", "pymodules.api", "api")
+require_optional_dependency("fastapi", "pymodules.contrib.api", "api")
 
 if TYPE_CHECKING:
     from .conventions import HTTPMethod, RESTConvention, RouteConvention, RouteInfo

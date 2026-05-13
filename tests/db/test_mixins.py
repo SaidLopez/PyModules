@@ -17,7 +17,7 @@ class TestUUIDMixin:
         """UUIDMixin should generate UUID on insert."""
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, UUIDMixin
+        from pymodules.contrib.db import Base, UUIDMixin
 
         class UUIDModel(UUIDMixin, Base):
             __tablename__ = "uuid_test"
@@ -41,7 +41,7 @@ class TestUUIDMixin:
         """Generated UUID should be a valid UUID."""
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, UUIDMixin
+        from pymodules.contrib.db import Base, UUIDMixin
 
         class UUIDModel(UUIDMixin, Base):
             __tablename__ = "uuid_valid_test"
@@ -66,7 +66,7 @@ class TestUUIDMixin:
         """UUIDMixin.id should be the primary key."""
         from sqlalchemy import Column, String
 
-        from pymodules.db import Base, UUIDMixin
+        from pymodules.contrib.db import Base, UUIDMixin
 
         class UUIDModel(UUIDMixin, Base):
             __tablename__ = "uuid_pk_test"
@@ -85,7 +85,7 @@ class TestTimestampMixin:
         """TimestampMixin should set created_at on insert."""
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, TimestampMixin, UUIDMixin
+        from pymodules.contrib.db import Base, TimestampMixin, UUIDMixin
 
         class TimestampModel(UUIDMixin, TimestampMixin, Base):
             __tablename__ = "ts_created_test"
@@ -116,7 +116,7 @@ class TestTimestampMixin:
         """TimestampMixin should set updated_at on insert."""
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, TimestampMixin, UUIDMixin
+        from pymodules.contrib.db import Base, TimestampMixin, UUIDMixin
 
         class TimestampModel(UUIDMixin, TimestampMixin, Base):
             __tablename__ = "ts_updated_insert_test"
@@ -142,7 +142,7 @@ class TestTimestampMixin:
 
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, TimestampMixin, UUIDMixin
+        from pymodules.contrib.db import Base, TimestampMixin, UUIDMixin
 
         class TimestampModel(UUIDMixin, TimestampMixin, Base):
             __tablename__ = "ts_updated_change_test"
@@ -181,7 +181,7 @@ class TestTimestampMixin:
 
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, TimestampMixin, UUIDMixin
+        from pymodules.contrib.db import Base, TimestampMixin, UUIDMixin
 
         class TimestampModel(UUIDMixin, TimestampMixin, Base):
             __tablename__ = "ts_created_unchanged_test"
@@ -222,7 +222,7 @@ class TestSoftDeleteMixin:
         """SoftDeleteMixin.is_deleted should default to False."""
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, SoftDeleteMixin, UUIDMixin
+        from pymodules.contrib.db import Base, SoftDeleteMixin, UUIDMixin
 
         class SoftDeleteModel(UUIDMixin, SoftDeleteMixin, Base):
             __tablename__ = "sd_default_test"
@@ -246,7 +246,7 @@ class TestSoftDeleteMixin:
         """soft_delete() should set is_deleted to True."""
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, SoftDeleteMixin, UUIDMixin
+        from pymodules.contrib.db import Base, SoftDeleteMixin, UUIDMixin
 
         class SoftDeleteModel(UUIDMixin, SoftDeleteMixin, Base):
             __tablename__ = "sd_flag_test"
@@ -274,7 +274,7 @@ class TestSoftDeleteMixin:
         """soft_delete() should set deleted_at timestamp."""
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, SoftDeleteMixin, UUIDMixin
+        from pymodules.contrib.db import Base, SoftDeleteMixin, UUIDMixin
 
         class SoftDeleteModel(UUIDMixin, SoftDeleteMixin, Base):
             __tablename__ = "sd_timestamp_test"
@@ -307,7 +307,7 @@ class TestSoftDeleteMixin:
         """restore() should set is_deleted to False."""
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, SoftDeleteMixin, UUIDMixin
+        from pymodules.contrib.db import Base, SoftDeleteMixin, UUIDMixin
 
         class SoftDeleteModel(UUIDMixin, SoftDeleteMixin, Base):
             __tablename__ = "sd_restore_flag_test"
@@ -338,7 +338,7 @@ class TestSoftDeleteMixin:
         """restore() should clear deleted_at timestamp."""
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-        from pymodules.db import Base, SoftDeleteMixin, UUIDMixin
+        from pymodules.contrib.db import Base, SoftDeleteMixin, UUIDMixin
 
         class SoftDeleteModel(UUIDMixin, SoftDeleteMixin, Base):
             __tablename__ = "sd_restore_timestamp_test"

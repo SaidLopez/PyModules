@@ -11,7 +11,7 @@ import asyncio
 import socket
 from dataclasses import dataclass, field
 
-from ..logging import get_logger
+from ...logging import get_logger
 from .registry import (
     DiscoveryError,
     ServiceInstance,

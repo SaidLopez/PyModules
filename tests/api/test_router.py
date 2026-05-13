@@ -10,7 +10,7 @@ class TestModuleRouter:
 
     def test_init_with_host(self, host) -> None:
         """ModuleRouter should accept ModuleHost in constructor."""
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         router = ModuleRouter(host)
 
@@ -18,7 +18,7 @@ class TestModuleRouter:
 
     def test_init_with_custom_convention(self, host) -> None:
         """ModuleRouter should accept custom RouteConvention."""
-        from pymodules.api import ModuleRouter, RESTConvention
+        from pymodules.contrib.api import ModuleRouter, RESTConvention
 
         convention = RESTConvention()
         router = ModuleRouter(host, convention=convention)
@@ -27,7 +27,7 @@ class TestModuleRouter:
 
     def test_register_event_creates_endpoint(self, host, sample_events, app) -> None:
         """register_event should create an HTTP endpoint."""
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         router = ModuleRouter(host)
         router.register_event(sample_events["CreateUser"])
@@ -38,7 +38,7 @@ class TestModuleRouter:
 
     def test_skips_duplicate_events(self, host, sample_events) -> None:
         """ModuleRouter should not register the same event twice."""
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         router = ModuleRouter(host)
         router.register_event(sample_events["CreateUser"])
@@ -52,7 +52,7 @@ class TestModuleRouter:
         from dataclasses import dataclass
 
         from pymodules import Event, EventInput, EventOutput
-        from pymodules.api import ModuleRouter, exclude_from_api
+        from pymodules.contrib.api import ModuleRouter, exclude_from_api
 
         @dataclass
         class TestInput(EventInput):
@@ -78,7 +78,7 @@ class TestModuleRouter:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         # Register module with host
         host.register(sample_module)
@@ -104,7 +104,7 @@ class TestModuleRouter:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         host.register(sample_module)
 
@@ -129,7 +129,7 @@ class TestModuleRouter:
         from fastapi.testclient import TestClient
 
         from pymodules import Module, module
-        from pymodules.api import ModuleRouter, register_error_handlers
+        from pymodules.contrib.api import ModuleRouter, register_error_handlers
 
         @module(name="failing")
         class FailingModule(Module):
@@ -157,7 +157,7 @@ class TestModuleRouter:
 
     def test_mount_includes_router(self, host, sample_events, app) -> None:
         """mount() should include router in FastAPI app."""
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         router = ModuleRouter(host)
         router.register_event(sample_events["CreateUser"])
@@ -193,7 +193,7 @@ class DiscoverEvent(Event[DiscoverInput, DiscoverOutput]):
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.api import ModuleRouter
+            from pymodules.contrib.api import ModuleRouter
 
             router = ModuleRouter(host)
             count = router.discover_events("discover_pkg")
@@ -240,7 +240,7 @@ class Event2(Event[Input2, Output2]):
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.api import ModuleRouter
+            from pymodules.contrib.api import ModuleRouter
 
             router = ModuleRouter(host)
             count = router.discover_events("count_pkg")

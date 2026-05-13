@@ -5,7 +5,7 @@ Provides distributed message broker integration for inter-service communication.
 Supports Redis Streams out of the box, with protocol definitions for Kafka and RabbitMQ.
 
 Example:
-    from pymodules.messaging import RedisBroker, EventConsumer, Message
+    from pymodules.contrib.messaging import RedisBroker, EventConsumer, Message
 
     # Configure broker
     broker = RedisBroker(url="redis://localhost:6379")

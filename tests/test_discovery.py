@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from pymodules.discovery.dns import DNSRegistryConfig, DNSServiceRegistry
-from pymodules.discovery.registry import (
+from pymodules.contrib.discovery.dns import DNSRegistryConfig, DNSServiceRegistry
+from pymodules.contrib.discovery.registry import (
     DiscoveryError,
     RegistrationError,
     ServiceInstance,

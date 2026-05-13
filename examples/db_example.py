@@ -1,6 +1,6 @@
 """Database layer example.
 
-This example demonstrates how to use the pymodules.db layer for:
+This example demonstrates how to use the pymodules.contrib.db layer for:
 - Database connection management
 - Model definitions with mixins
 - Repository pattern for CRUD operations
@@ -18,7 +18,7 @@ from uuid import UUID
 from sqlalchemy import Column, String
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from pymodules.db import Base, BaseRepository, SoftDeleteMixin, TimestampMixin, UUIDMixin
+from pymodules.contrib.db import Base, BaseRepository, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 
 # =============================================================================

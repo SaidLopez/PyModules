@@ -13,13 +13,13 @@ class TestBase:
         """Base should be a DeclarativeBase."""
         from sqlalchemy.orm import DeclarativeBase
 
-        from pymodules.db import Base
+        from pymodules.contrib.db import Base
 
         assert issubclass(Base, DeclarativeBase)
 
     def test_can_create_models(self) -> None:
         """Models can inherit from Base."""
-        from pymodules.db import Base
+        from pymodules.contrib.db import Base
 
         class TestModel(Base):
             __tablename__ = "test_models"
@@ -30,7 +30,7 @@ class TestBase:
 
     def test_models_have_metadata(self) -> None:
         """Models should have access to metadata."""
-        from pymodules.db import Base
+        from pymodules.contrib.db import Base
 
         assert Base.metadata is not None
 
@@ -39,7 +39,7 @@ class TestBase:
         """Base.metadata.create_all should create tables."""
         from sqlalchemy import Column, String, inspect
 
-        from pymodules.db import Base
+        from pymodules.contrib.db import Base
 
         class TempModel(Base):
             __tablename__ = "temp_test_table"

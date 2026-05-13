@@ -8,7 +8,7 @@ This module provides database utilities including:
 - DatabaseSettings: Configuration via environment variables
 
 Example:
-    from pymodules.db import DatabaseManager, Base, BaseRepository
+    from pymodules.contrib.db import DatabaseManager, Base, BaseRepository
 
     db = DatabaseManager("postgresql+asyncpg://localhost/mydb")
     await db.connect()
@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 from pymodules._imports import require_optional_dependency
 
 # Check for SQLAlchemy dependency at import time
-require_optional_dependency("sqlalchemy", "pymodules.db", "db")
+require_optional_dependency("sqlalchemy", "pymodules.contrib.db", "db")
 
 if TYPE_CHECKING:
     from .base import Base

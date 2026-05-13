@@ -14,7 +14,7 @@ class TestAuthMiddleware:
     @pytest.fixture
     def mock_provider(self):
         """Create a mock auth provider."""
-        from pymodules.api.auth import AuthProvider, TokenClaims
+        from pymodules.contrib.api.auth import AuthProvider, TokenClaims
 
         class MockProvider(AuthProvider):
             async def validate_token(self, token: str) -> TokenClaims | None:
@@ -38,7 +38,7 @@ class TestAuthMiddleware:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api.auth import AuthMiddleware
+        from pymodules.contrib.api.auth import AuthMiddleware
 
         app = FastAPI()
         app.add_middleware(AuthMiddleware, provider=mock_provider)
@@ -58,7 +58,7 @@ class TestAuthMiddleware:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api.auth import AuthMiddleware
+        from pymodules.contrib.api.auth import AuthMiddleware
 
         app = FastAPI()
         app.add_middleware(AuthMiddleware, provider=mock_provider)
@@ -78,7 +78,7 @@ class TestAuthMiddleware:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api.auth import AuthMiddleware
+        from pymodules.contrib.api.auth import AuthMiddleware
 
         app = FastAPI()
         app.add_middleware(AuthMiddleware, provider=mock_provider)
@@ -98,7 +98,7 @@ class TestAuthMiddleware:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api.auth import AuthMiddleware
+        from pymodules.contrib.api.auth import AuthMiddleware
 
         app = FastAPI()
         app.add_middleware(
@@ -129,7 +129,7 @@ class TestAuthMiddleware:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api.auth import AuthMiddleware
+        from pymodules.contrib.api.auth import AuthMiddleware
 
         app = FastAPI()
         app.add_middleware(AuthMiddleware, provider=mock_provider)
@@ -153,7 +153,7 @@ class TestAuthMiddleware:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api.auth import AuthMiddleware, AuthProvider, TokenClaims
+        from pymodules.contrib.api.auth import AuthMiddleware, AuthProvider, TokenClaims
 
         class CustomProvider(AuthProvider):
             async def validate_token(self, token: str) -> TokenClaims | None:
@@ -188,7 +188,7 @@ class TestHelperFunctions:
         """get_current_user should return user from request state."""
         from unittest.mock import MagicMock
 
-        from pymodules.api.auth import TokenClaims, get_current_user
+        from pymodules.contrib.api.auth import TokenClaims, get_current_user
 
         # Create mock request with user in state
         request = MagicMock()
@@ -208,7 +208,7 @@ class TestHelperFunctions:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api.auth import (
+        from pymodules.contrib.api.auth import (
             AuthMiddleware,
             AuthProvider,
             TokenClaims,
@@ -258,7 +258,7 @@ class TestHelperFunctions:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api.auth import (
+        from pymodules.contrib.api.auth import (
             AuthMiddleware,
             AuthProvider,
             TokenClaims,

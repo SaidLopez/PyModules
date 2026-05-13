@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
     registered with the same metadata.
 
     Example:
-        from pymodules.db import Base, UUIDMixin, TimestampMixin
+        from pymodules.contrib.db import Base, UUIDMixin, TimestampMixin
 
         class User(UUIDMixin, TimestampMixin, Base):
             __tablename__ = "users"

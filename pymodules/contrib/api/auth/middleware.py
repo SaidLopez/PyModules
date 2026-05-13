@@ -28,7 +28,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     Example:
         from fastapi import FastAPI
-        from pymodules.api.auth import AuthMiddleware, JWTAuthProvider
+        from pymodules.contrib.api.auth import AuthMiddleware, JWTAuthProvider
 
         app = FastAPI()
         provider = JWTAuthProvider(settings)

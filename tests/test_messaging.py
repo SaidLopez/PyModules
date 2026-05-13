@@ -8,12 +8,12 @@ from dataclasses import dataclass
 import pytest
 
 from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
-from pymodules.messaging.broker import (
+from pymodules.contrib.messaging.broker import (
     Message,
     MessageBroker,
     MessageBrokerConfig,
 )
-from pymodules.messaging.consumer import (
+from pymodules.contrib.messaging.consumer import (
     EventConsumer,
     EventConsumerConfig,
     ExternalEvent,

@@ -12,7 +12,7 @@ class TestTokenClaims:
 
     def test_required_fields(self) -> None:
         """TokenClaims should require sub, exp, iat fields."""
-        from pymodules.api.auth import TokenClaims
+        from pymodules.contrib.api.auth import TokenClaims
 
         now = datetime.now(UTC)
         claims = TokenClaims(
@@ -27,7 +27,7 @@ class TestTokenClaims:
 
     def test_optional_permissions(self) -> None:
         """TokenClaims should support optional permissions."""
-        from pymodules.api.auth import TokenClaims
+        from pymodules.contrib.api.auth import TokenClaims
 
         now = datetime.now(UTC)
         claims = TokenClaims(
@@ -41,7 +41,7 @@ class TestTokenClaims:
 
     def test_optional_extra(self) -> None:
         """TokenClaims should support extra arbitrary data."""
-        from pymodules.api.auth import TokenClaims
+        from pymodules.contrib.api.auth import TokenClaims
 
         now = datetime.now(UTC)
         claims = TokenClaims(
@@ -56,7 +56,7 @@ class TestTokenClaims:
 
     def test_is_expired(self) -> None:
         """TokenClaims.is_expired should return True for expired tokens."""
-        from pymodules.api.auth import TokenClaims
+        from pymodules.contrib.api.auth import TokenClaims
 
         now = datetime.now(UTC)
 
@@ -82,14 +82,14 @@ class TestAuthProvider:
 
     def test_is_abstract(self) -> None:
         """AuthProvider should be abstract."""
-        from pymodules.api.auth import AuthProvider
+        from pymodules.contrib.api.auth import AuthProvider
 
         with pytest.raises(TypeError, match="abstract"):
             AuthProvider()
 
     def test_requires_validate_token(self) -> None:
         """AuthProvider should require validate_token method."""
-        from pymodules.api.auth import AuthProvider
+        from pymodules.contrib.api.auth import AuthProvider
 
         # Check that validate_token is abstract
         assert hasattr(AuthProvider, "validate_token")
@@ -97,7 +97,7 @@ class TestAuthProvider:
 
     def test_requires_create_token(self) -> None:
         """AuthProvider should require create_token method."""
-        from pymodules.api.auth import AuthProvider
+        from pymodules.contrib.api.auth import AuthProvider
 
         assert hasattr(AuthProvider, "create_token")
         assert getattr(AuthProvider.create_token, "__isabstractmethod__", False)
@@ -106,7 +106,7 @@ class TestAuthProvider:
         """A concrete AuthProvider implementation should work."""
         from datetime import UTC, datetime, timedelta
 
-        from pymodules.api.auth import AuthProvider, TokenClaims
+        from pymodules.contrib.api.auth import AuthProvider, TokenClaims
 
         class MockAuthProvider(AuthProvider):
             async def validate_token(self, token: str) -> TokenClaims | None:

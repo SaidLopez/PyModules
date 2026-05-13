@@ -8,15 +8,17 @@ from pymodules import (
     Event,
     EventInput,
     EventOutput,
+    Module,
+    ModuleHost,
+    ModuleHostConfig,
+    module,
+)
+from pymodules.contrib.health import (
     HealthCheck,
     HealthCheckResult,
     HealthReport,
     HealthStatus,
-    Module,
-    ModuleHost,
-    ModuleHostConfig,
     create_callable_check,
-    module,
 )
 
 

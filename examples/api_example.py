@@ -1,6 +1,6 @@
 """API layer example.
 
-This example demonstrates how to use the pymodules.api layer for:
+This example demonstrates how to use the pymodules.contrib.api layer for:
 - ModuleRouter with auto-discovery
 - Convention-based REST routing
 - Custom endpoint decorators
@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
-from pymodules.api import (
+from pymodules.contrib.api import (
     ModuleRouter,
     api_endpoint,
     exclude_from_api,

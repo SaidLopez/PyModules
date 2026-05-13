@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from ..health import HealthCheck, HealthStatus
+from ..contrib.health import HealthCheck, HealthStatus
 from ..host import ModuleHost
 from ..interfaces import Event, EventInput, EventOutput
 

@@ -11,7 +11,7 @@ class TestDatabaseManager:
 
     async def test_initialize_creates_engine(self) -> None:
         """DatabaseManager should create engine on connect."""
-        from pymodules.db import DatabaseManager
+        from pymodules.contrib.db import DatabaseManager
 
         manager = DatabaseManager("sqlite+aiosqlite:///:memory:")
         await manager.connect()
@@ -21,7 +21,7 @@ class TestDatabaseManager:
 
     async def test_session_context_manager(self) -> None:
         """Session context manager should yield async session."""
-        from pymodules.db import DatabaseManager
+        from pymodules.contrib.db import DatabaseManager
 
         manager = DatabaseManager("sqlite+aiosqlite:///:memory:")
         await manager.connect()
@@ -35,7 +35,7 @@ class TestDatabaseManager:
         """Session should commit when no exception occurs."""
         from sqlalchemy import text
 
-        from pymodules.db import Base, DatabaseManager
+        from pymodules.contrib.db import Base, DatabaseManager
 
         manager = DatabaseManager("sqlite+aiosqlite:///:memory:")
         await manager.connect()
@@ -61,7 +61,7 @@ class TestDatabaseManager:
         """Session should rollback when exception occurs."""
         from sqlalchemy import text
 
-        from pymodules.db import Base, DatabaseManager
+        from pymodules.contrib.db import Base, DatabaseManager
 
         manager = DatabaseManager("sqlite+aiosqlite:///:memory:")
         await manager.connect()
@@ -91,7 +91,7 @@ class TestDatabaseManager:
 
     async def test_close_disposes_engine(self) -> None:
         """Disconnect should dispose of the engine."""
-        from pymodules.db import DatabaseManager
+        from pymodules.contrib.db import DatabaseManager
 
         manager = DatabaseManager("sqlite+aiosqlite:///:memory:")
         await manager.connect()
@@ -104,7 +104,7 @@ class TestDatabaseManager:
 
     async def test_engine_property_raises_before_init(self) -> None:
         """Accessing engine before connect should raise."""
-        from pymodules.db import DatabaseManager
+        from pymodules.contrib.db import DatabaseManager
 
         manager = DatabaseManager("sqlite+aiosqlite:///:memory:")
 
@@ -113,7 +113,7 @@ class TestDatabaseManager:
 
     async def test_get_session_dependency(self) -> None:
         """get_session should work as FastAPI dependency."""
-        from pymodules.db import DatabaseManager
+        from pymodules.contrib.db import DatabaseManager
 
         manager = DatabaseManager("sqlite+aiosqlite:///:memory:")
         await manager.connect()
@@ -129,7 +129,7 @@ class TestDatabaseManager:
 
     async def test_double_connect_is_safe(self) -> None:
         """Calling connect twice should be idempotent."""
-        from pymodules.db import DatabaseManager
+        from pymodules.contrib.db import DatabaseManager
 
         manager = DatabaseManager("sqlite+aiosqlite:///:memory:")
         await manager.connect()
@@ -143,7 +143,7 @@ class TestDatabaseManager:
 
     async def test_disconnect_without_connect_is_safe(self) -> None:
         """Calling disconnect without connect should not raise."""
-        from pymodules.db import DatabaseManager
+        from pymodules.contrib.db import DatabaseManager
 
         manager = DatabaseManager("sqlite+aiosqlite:///:memory:")
         await manager.disconnect()  # Should not raise

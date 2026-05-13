@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import Column, String
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from pymodules.db import Base, BaseRepository, SoftDeleteMixin, TimestampMixin, UUIDMixin
+from pymodules.contrib.db import Base, BaseRepository, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 
 # Define test model at module level to avoid redefinition issues

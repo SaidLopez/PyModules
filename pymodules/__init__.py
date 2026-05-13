@@ -5,11 +5,12 @@ A framework for building scalable, plugin-based applications using
 events and modules, inspired by NetModules.
 
 Subpackages:
-    pymodules.messaging - Distributed message broker integration
-    pymodules.discovery - Service discovery for microservices
-    pymodules.fastapi - FastAPI integration (legacy)
-    pymodules.api - REST API generation layer
-    pymodules.db - Database abstraction layer
+    pymodules.contrib.messaging - Distributed message broker integration
+    pymodules.contrib.discovery - Service discovery for microservices
+    pymodules.contrib.api - REST API generation layer
+    pymodules.contrib.db - Database abstraction layer
+    pymodules.contrib.health - Kubernetes-shaped health checks
+    pymodules.fastapi - Legacy FastAPI integration (deprecated; use pymodules.contrib.api)
 """
 
 from .config import Metrics, ModuleHostConfig
@@ -21,15 +22,6 @@ from .exceptions import (
     ModuleRegistrationError,
     PyModulesError,
     RepositoryError,
-)
-from .health import (
-    HealthCheck,
-    HealthCheckResult,
-    HealthReport,
-    HealthStatus,
-    create_callable_check,
-    create_http_check,
-    create_tcp_check,
 )
 from .host import ModuleHost
 from .interfaces import Event, EventInput, EventOutput
@@ -111,41 +103,6 @@ __all__ = [
     "extract_trace_context",
     "generate_id",
     "OpenTelemetryExporter",
-    # Health
-    "HealthCheck",
-    "HealthCheckResult",
-    "HealthReport",
-    "HealthStatus",
-    "create_http_check",
-    "create_tcp_check",
-    "create_callable_check",
-    # Subpackages (access via pymodules.messaging, pymodules.discovery, etc.)
-    "messaging",
-    "discovery",
-    "api",
-    "db",
 ]
 
 __version__ = "0.3.0"
-
-
-# Lazy loading for optional subpackages
-def __getattr__(name: str) -> object:
-    """Lazy import optional subpackages."""
-    if name == "messaging":
-        from . import messaging
-
-        return messaging
-    if name == "discovery":
-        from . import discovery
-
-        return discovery
-    if name == "api":
-        from . import api
-
-        return api
-    if name == "db":
-        from . import db
-
-        return db
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

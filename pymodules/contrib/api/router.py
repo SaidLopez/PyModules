@@ -71,7 +71,7 @@ class ModuleRouter:
 
     Example:
         from pymodules import ModuleHost
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         host = ModuleHost()
         host.register(UserModule())

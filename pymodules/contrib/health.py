@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .host import ModuleHost
 
-from .logging import get_logger
+from ..logging import get_logger
 
 health_logger = get_logger("health")
 

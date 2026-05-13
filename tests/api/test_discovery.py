@@ -8,7 +8,7 @@ class TestDiscoveredEvent:
 
     def test_stores_event_class(self, sample_events) -> None:
         """DiscoveredEvent should store the event class."""
-        from pymodules.api import DiscoveredEvent
+        from pymodules.contrib.api import DiscoveredEvent
 
         discovered = DiscoveredEvent(
             event_class=sample_events["CreateUser"],
@@ -20,7 +20,7 @@ class TestDiscoveredEvent:
 
     def test_stores_input_type(self, sample_events) -> None:
         """DiscoveredEvent should store the input type."""
-        from pymodules.api import DiscoveredEvent
+        from pymodules.contrib.api import DiscoveredEvent
 
         discovered = DiscoveredEvent(
             event_class=sample_events["CreateUser"],
@@ -32,7 +32,7 @@ class TestDiscoveredEvent:
 
     def test_stores_output_type(self, sample_events) -> None:
         """DiscoveredEvent should store the output type."""
-        from pymodules.api import DiscoveredEvent
+        from pymodules.contrib.api import DiscoveredEvent
 
         discovered = DiscoveredEvent(
             event_class=sample_events["CreateUser"],
@@ -72,7 +72,7 @@ class TestEvent(Event[TestInput, TestOutput]):
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.api import EventDiscovery
+            from pymodules.contrib.api import EventDiscovery
 
             discovery = EventDiscovery()
             events = discovery.discover("test_pkg")
@@ -115,7 +115,7 @@ class RealEvent(Event[RealInput, RealOutput]):
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.api import EventDiscovery
+            from pymodules.contrib.api import EventDiscovery
 
             discovery = EventDiscovery()
             events = discovery.discover("test_pkg2")
@@ -157,7 +157,7 @@ class NestedEvent(Event[NestedInput, NestedOutput]):
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.api import EventDiscovery
+            from pymodules.contrib.api import EventDiscovery
 
             discovery = EventDiscovery()
             events = discovery.discover("test_pkg3")
@@ -207,7 +207,7 @@ class ExcludedEvent(Event[ExcludedInput, ExcludedOutput]):
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.api import EventDiscovery
+            from pymodules.contrib.api import EventDiscovery
 
             discovery = EventDiscovery(exclude_patterns=["internal_*"])
             events = discovery.discover("test_pkg4")
@@ -220,7 +220,7 @@ class ExcludedEvent(Event[ExcludedInput, ExcludedOutput]):
 
     def test_extracts_input_output_types(self, sample_events) -> None:
         """EventDiscovery should extract input/output types from generics."""
-        from pymodules.api import EventDiscovery
+        from pymodules.contrib.api import EventDiscovery
 
         discovery = EventDiscovery()
         input_cls, output_cls = discovery._extract_type_params(sample_events["CreateUser"])
@@ -238,7 +238,7 @@ class ExcludedEvent(Event[ExcludedInput, ExcludedOutput]):
         (pkg_dir / "events.py").write_text("""
 from dataclasses import dataclass
 from pymodules import Event, EventInput, EventOutput
-from pymodules.api import exclude_from_api
+from pymodules.contrib.api import exclude_from_api
 
 @dataclass
 class PublicInput(EventInput):
@@ -266,7 +266,7 @@ class PrivateEvent(Event[PrivateInput, PrivateOutput]):
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.api import EventDiscovery
+            from pymodules.contrib.api import EventDiscovery
 
             discovery = EventDiscovery()
             events = discovery.discover("test_pkg5")

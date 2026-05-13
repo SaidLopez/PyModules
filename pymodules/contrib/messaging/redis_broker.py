@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from ..logging import get_logger
+from ...logging import get_logger
 from .broker import (
     BrokerConnectionError,
     ConsumeError,

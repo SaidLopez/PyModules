@@ -11,7 +11,7 @@ from sqlalchemy import Column, String
 from sqlalchemy.orm import declarative_base
 
 from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
-from pymodules.db.mixins import UUIDType
+from pymodules.contrib.db.mixins import UUIDType
 
 # Define Base and model at module level to avoid SQLAlchemy redefinition issues
 IntegrationBase = declarative_base()
@@ -114,7 +114,7 @@ async def full_stack_setup(tmp_path):
     """Set up a full stack test environment."""
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-    from pymodules.db import BaseRepository
+    from pymodules.contrib.db import BaseRepository
 
     # Set up database
     db_path = tmp_path / "test.db"
@@ -222,7 +222,7 @@ class TestFullStackIntegration:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         setup = full_stack_setup
         host = setup["host"]
@@ -268,7 +268,7 @@ class TestFullStackIntegration:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         app = FastAPI()
         router = ModuleRouter(host)
@@ -304,7 +304,7 @@ class TestFullStackIntegration:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         app = FastAPI()
         router = ModuleRouter(host)
@@ -343,7 +343,7 @@ class TestFullStackIntegration:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         app = FastAPI()
         router = ModuleRouter(host)
@@ -379,7 +379,7 @@ class TestFullStackIntegration:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import ModuleRouter
+        from pymodules.contrib.api import ModuleRouter
 
         app = FastAPI()
         router = ModuleRouter(host)
@@ -402,7 +402,7 @@ class TestFullStackIntegration:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import ModuleRouter, register_error_handlers
+        from pymodules.contrib.api import ModuleRouter, register_error_handlers
 
         setup = full_stack_setup
         host = setup["host"]
@@ -429,8 +429,8 @@ class TestFullStackIntegration:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules.api import ModuleRouter
-        from pymodules.api.auth import AuthMiddleware, AuthProvider, TokenClaims
+        from pymodules.contrib.api import ModuleRouter
+        from pymodules.contrib.api.auth import AuthMiddleware, AuthProvider, TokenClaims
 
         setup = full_stack_setup
         host = setup["host"]

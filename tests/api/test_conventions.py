@@ -8,7 +8,7 @@ class TestHTTPMethod:
 
     def test_all_methods_defined(self) -> None:
         """HTTPMethod should define all standard HTTP methods."""
-        from pymodules.api import HTTPMethod
+        from pymodules.contrib.api import HTTPMethod
 
         assert hasattr(HTTPMethod, "GET")
         assert hasattr(HTTPMethod, "POST")
@@ -22,7 +22,7 @@ class TestRouteInfo:
 
     def test_stores_route_data(self) -> None:
         """RouteInfo should store all route configuration."""
-        from pymodules.api import HTTPMethod, RouteInfo
+        from pymodules.contrib.api import HTTPMethod, RouteInfo
 
         info = RouteInfo(
             path="/users",
@@ -42,7 +42,7 @@ class TestRouteConvention:
 
     def test_get_route_returns_route_info(self, sample_events) -> None:
         """RouteConvention.get_route should return RouteInfo."""
-        from pymodules.api import RouteConvention, RouteInfo
+        from pymodules.contrib.api import RouteConvention, RouteInfo
 
         convention = RouteConvention()
         route = convention.get_route(sample_events["CreateUser"])
@@ -57,7 +57,7 @@ class TestRESTConvention:
 
     def test_create_maps_to_post(self, sample_events) -> None:
         """CreateX events should map to POST /xs."""
-        from pymodules.api import HTTPMethod, RESTConvention
+        from pymodules.contrib.api import HTTPMethod, RESTConvention
 
         convention = RESTConvention()
         route = convention.get_route(sample_events["CreateUser"])
@@ -68,7 +68,7 @@ class TestRESTConvention:
 
     def test_get_maps_to_get_with_id(self, sample_events) -> None:
         """GetX events should map to GET /xs/{id}."""
-        from pymodules.api import HTTPMethod, RESTConvention
+        from pymodules.contrib.api import HTTPMethod, RESTConvention
 
         convention = RESTConvention()
         route = convention.get_route(sample_events["GetUser"])
@@ -80,7 +80,7 @@ class TestRESTConvention:
 
     def test_list_maps_to_get_collection(self, sample_events) -> None:
         """ListXs events should map to GET /xs."""
-        from pymodules.api import HTTPMethod, RESTConvention
+        from pymodules.contrib.api import HTTPMethod, RESTConvention
 
         convention = RESTConvention()
         route = convention.get_route(sample_events["ListUsers"])
@@ -94,7 +94,7 @@ class TestRESTConvention:
         from dataclasses import dataclass
 
         from pymodules import Event, EventInput, EventOutput
-        from pymodules.api import HTTPMethod, RESTConvention
+        from pymodules.contrib.api import HTTPMethod, RESTConvention
 
         @dataclass
         class UpdateUserInput(EventInput):
@@ -120,7 +120,7 @@ class TestRESTConvention:
         from dataclasses import dataclass
 
         from pymodules import Event, EventInput, EventOutput
-        from pymodules.api import HTTPMethod, RESTConvention
+        from pymodules.contrib.api import HTTPMethod, RESTConvention
 
         @dataclass
         class DeleteUserInput(EventInput):
@@ -145,7 +145,7 @@ class TestRESTConvention:
         from dataclasses import dataclass
 
         from pymodules import Event, EventInput, EventOutput
-        from pymodules.api import HTTPMethod, RESTConvention
+        from pymodules.contrib.api import HTTPMethod, RESTConvention
 
         @dataclass
         class SearchUsersInput(EventInput):
@@ -170,7 +170,7 @@ class TestRESTConvention:
         from dataclasses import dataclass
 
         from pymodules import Event, EventInput, EventOutput
-        from pymodules.api import HTTPMethod, RESTConvention
+        from pymodules.contrib.api import HTTPMethod, RESTConvention
 
         @dataclass
         class ActivateUserInput(EventInput):
@@ -192,7 +192,7 @@ class TestRESTConvention:
 
     def test_pluralizes_resource_name(self) -> None:
         """RESTConvention should pluralize resource names."""
-        from pymodules.api import RESTConvention
+        from pymodules.contrib.api import RESTConvention
 
         convention = RESTConvention()
 
@@ -204,7 +204,7 @@ class TestRESTConvention:
 
     def test_handles_irregular_plurals(self) -> None:
         """RESTConvention should handle some irregular plurals."""
-        from pymodules.api import RESTConvention
+        from pymodules.contrib.api import RESTConvention
 
         convention = RESTConvention()
 

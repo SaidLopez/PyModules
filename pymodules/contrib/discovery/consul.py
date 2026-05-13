@@ -11,7 +11,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from ..logging import get_logger
+from ...logging import get_logger
 from .registry import (
     DiscoveryError,
     RegistrationError,

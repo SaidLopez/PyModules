@@ -14,7 +14,7 @@ class TestJWTSettings:
         monkeypatch.setenv("PYMODULES_JWT_ALGORITHM", "HS512")
         monkeypatch.setenv("PYMODULES_JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60")
 
-        from pymodules.api.auth import JWTSettings
+        from pymodules.contrib.api.auth import JWTSettings
 
         settings = JWTSettings()
 
@@ -31,7 +31,7 @@ class TestJWTSettings:
             if key.startswith("PYMODULES_JWT_"):
                 os.environ.pop(key, None)
 
-        from pymodules.api.auth import JWTSettings
+        from pymodules.contrib.api.auth import JWTSettings
 
         # Provide required secret_key
         settings = JWTSettings(secret_key="test-secret")
@@ -40,7 +40,7 @@ class TestJWTSettings:
 
     def test_default_expiry(self) -> None:
         """JWTSettings should have default token expiry."""
-        from pymodules.api.auth import JWTSettings
+        from pymodules.contrib.api.auth import JWTSettings
 
         settings = JWTSettings(secret_key="test-secret")
 
@@ -53,7 +53,7 @@ class TestJWTAuthProvider:
     @pytest.fixture
     def jwt_provider(self):
         """Create a JWTAuthProvider for testing."""
-        from pymodules.api.auth import JWTAuthProvider, JWTSettings
+        from pymodules.contrib.api.auth import JWTAuthProvider, JWTSettings
 
         settings = JWTSettings(secret_key="test-secret-key-for-testing-12345")
         return JWTAuthProvider(settings)
@@ -69,7 +69,7 @@ class TestJWTAuthProvider:
     @pytest.mark.asyncio
     async def test_validate_token_returns_claims(self, jwt_provider) -> None:
         """validate_token should return TokenClaims for valid token."""
-        from pymodules.api.auth import TokenClaims
+        from pymodules.contrib.api.auth import TokenClaims
 
         token = await jwt_provider.create_token({"sub": "user123", "permissions": ["read"]})
 
@@ -82,7 +82,7 @@ class TestJWTAuthProvider:
     @pytest.mark.asyncio
     async def test_validate_expired_token_returns_none(self, jwt_provider) -> None:
         """validate_token should return None for expired token."""
-        from pymodules.api.auth import JWTAuthProvider, JWTSettings
+        from pymodules.contrib.api.auth import JWTAuthProvider, JWTSettings
 
         # Create provider with very short expiry
         settings = JWTSettings(

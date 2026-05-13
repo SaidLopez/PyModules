@@ -33,7 +33,7 @@ async def db_session(
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     # Import Base to create tables
-    from pymodules.db import Base
+    from pymodules.contrib.db import Base
 
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -64,7 +64,7 @@ async def session_factory(
     """Create a session factory for repository tests."""
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from pymodules.db import Base
+    from pymodules.contrib.db import Base
 
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
