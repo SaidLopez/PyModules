@@ -25,56 +25,56 @@ class TestModuleRouter:
 
         assert router.convention is convention
 
-    def test_register_event_creates_endpoint(self, host, sample_events, app) -> None:
-        """register_event should create an HTTP endpoint."""
+    def test_register_command_creates_endpoint(self, host, sample_commands, app) -> None:
+        """register_command should create an HTTP endpoint."""
         from pymodules.contrib.api import ModuleRouter
 
         router = ModuleRouter(host)
-        router.register_event(sample_events["CreateUser"])
+        router.register_command(sample_commands["CreateUser"])
 
         # Check that route was added
         routes = [r.path for r in router.router.routes if hasattr(r, "path")]
         assert any("user" in r.lower() for r in routes)
 
-    def test_skips_duplicate_events(self, host, sample_events) -> None:
-        """ModuleRouter should not register the same event twice."""
+    def test_skips_duplicate_commands(self, host, sample_commands) -> None:
+        """ModuleRouter should not register the same command twice."""
         from pymodules.contrib.api import ModuleRouter
 
         router = ModuleRouter(host)
-        router.register_event(sample_events["CreateUser"])
+        router.register_command(sample_commands["CreateUser"])
         initial_count = len(router.router.routes)
 
-        router.register_event(sample_events["CreateUser"])
+        router.register_command(sample_commands["CreateUser"])
         assert len(router.router.routes) == initial_count
 
-    def test_skips_excluded_events(self, host) -> None:
-        """ModuleRouter should skip events with @exclude_from_api."""
+    def test_skips_excluded_commands(self, host) -> None:
+        """ModuleRouter should skip commands with @exclude_from_api."""
         from dataclasses import dataclass
 
-        from pymodules import Event, EventInput, EventOutput
+        from pymodules import Command, CommandRequest, CommandResponse
         from pymodules.contrib.api import ModuleRouter, exclude_from_api
 
         @dataclass
-        class TestInput(EventInput):
+        class TestInput(CommandRequest):
             value: str
 
         @dataclass
-        class TestOutput(EventOutput):
+        class TestOutput(CommandResponse):
             result: str
 
         @exclude_from_api
-        class ExcludedEvent(Event[TestInput, TestOutput]):
+        class ExcludedCommand(Command[TestInput, TestOutput]):
             pass
 
         router = ModuleRouter(host)
         initial_count = len(router.router.routes)
 
-        router.register_event(ExcludedEvent)
+        router.register_command(ExcludedCommand)
         assert len(router.router.routes) == initial_count
 
     @pytest.mark.asyncio
-    async def test_endpoint_dispatches_to_host(self, host, sample_events, sample_module) -> None:
-        """Endpoint should dispatch event to ModuleHost."""
+    async def test_endpoint_dispatches_to_host(self, host, sample_commands, sample_module) -> None:
+        """Endpoint should dispatch command to ModuleHost."""
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
@@ -85,7 +85,7 @@ class TestModuleRouter:
 
         app = FastAPI()
         router = ModuleRouter(host)
-        router.register_event(sample_events["CreateUser"])
+        router.register_command(sample_commands["CreateUser"])
         app.include_router(router.router)
 
         client = TestClient(app)
@@ -99,8 +99,8 @@ class TestModuleRouter:
             assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_endpoint_returns_output(self, host, sample_events, sample_module) -> None:
-        """Endpoint should return event output as JSON."""
+    async def test_endpoint_returns_output(self, host, sample_commands, sample_module) -> None:
+        """Endpoint should return command output as JSON."""
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
@@ -110,7 +110,7 @@ class TestModuleRouter:
 
         app = FastAPI()
         router = ModuleRouter(host)
-        router.register_event(sample_events["CreateUser"])
+        router.register_command(sample_commands["CreateUser"])
         app.include_router(router.router)
 
         client = TestClient(app)
@@ -123,7 +123,7 @@ class TestModuleRouter:
             assert "id" in data
             assert data["name"] == "Test"
 
-    def test_endpoint_handles_errors(self, host, sample_events) -> None:
+    def test_endpoint_handles_errors(self, host, sample_commands) -> None:
         """Endpoint should handle and return errors appropriately."""
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
@@ -133,10 +133,10 @@ class TestModuleRouter:
 
         @module(name="failing")
         class FailingModule(Module):
-            def can_handle(self, event):
+            def can_handle(self, command):
                 return True
 
-            async def handle(self, event):
+            async def handle(self, command):
                 raise ValueError("Something went wrong")
 
         host.register(FailingModule())
@@ -144,7 +144,7 @@ class TestModuleRouter:
         app = FastAPI()
         register_error_handlers(app)
         router = ModuleRouter(host)
-        router.register_event(sample_events["CreateUser"])
+        router.register_command(sample_commands["CreateUser"])
         app.include_router(router.router)
 
         client = TestClient(app, raise_server_exceptions=False)
@@ -155,39 +155,39 @@ class TestModuleRouter:
             response = client.post(create_route, json={"name": "Test", "email": "test@test.com"})
             assert response.status_code >= 400
 
-    def test_mount_includes_router(self, host, sample_events, app) -> None:
+    def test_mount_includes_router(self, host, sample_commands, app) -> None:
         """mount() should include router in FastAPI app."""
         from pymodules.contrib.api import ModuleRouter
 
         router = ModuleRouter(host)
-        router.register_event(sample_events["CreateUser"])
+        router.register_command(sample_commands["CreateUser"])
         router.mount(app)
 
         # App should now have the routes
         routes = [r.path for r in app.routes if hasattr(r, "path")]
         assert any("user" in r.lower() for r in routes)
 
-    def test_discover_events_registers_endpoints(self, host, tmp_path) -> None:
-        """discover_events should find and register all events."""
+    def test_discover_commands_registers_endpoints(self, host, tmp_path) -> None:
+        """discover_commands should find and register all commands."""
         import sys
 
-        # Create a temporary package with events
+        # Create a temporary package with commands
         pkg_dir = tmp_path / "discover_pkg"
         pkg_dir.mkdir()
         (pkg_dir / "__init__.py").write_text("")
-        (pkg_dir / "events.py").write_text("""
+        (pkg_dir / "commands.py").write_text("""
 from dataclasses import dataclass
-from pymodules import Event, EventInput, EventOutput
+from pymodules import Command, CommandRequest, CommandResponse
 
 @dataclass
-class DiscoverInput(EventInput):
+class DiscoverInput(CommandRequest):
     value: str
 
 @dataclass
-class DiscoverOutput(EventOutput):
+class DiscoverOutput(CommandResponse):
     result: str
 
-class DiscoverEvent(Event[DiscoverInput, DiscoverOutput]):
+class DiscoverCommand(Command[DiscoverInput, DiscoverOutput]):
     pass
 """)
 
@@ -196,7 +196,7 @@ class DiscoverEvent(Event[DiscoverInput, DiscoverOutput]):
             from pymodules.contrib.api import ModuleRouter
 
             router = ModuleRouter(host)
-            count = router.discover_events("discover_pkg")
+            count = router.discover_commands("discover_pkg")
 
             assert count >= 1
             routes = [r.path for r in router.router.routes if hasattr(r, "path")]
@@ -205,36 +205,36 @@ class DiscoverEvent(Event[DiscoverInput, DiscoverOutput]):
             sys.path.remove(str(tmp_path))
 
     def test_discover_returns_count(self, host, tmp_path) -> None:
-        """discover_events should return number of registered events."""
+        """discover_commands should return number of registered commands."""
         import sys
 
         pkg_dir = tmp_path / "count_pkg"
         pkg_dir.mkdir()
         (pkg_dir / "__init__.py").write_text("")
-        (pkg_dir / "events.py").write_text("""
+        (pkg_dir / "commands.py").write_text("""
 from dataclasses import dataclass
-from pymodules import Event, EventInput, EventOutput
+from pymodules import Command, CommandRequest, CommandResponse
 
 @dataclass
-class Input1(EventInput):
+class Input1(CommandRequest):
     value: str
 
 @dataclass
-class Output1(EventOutput):
+class Output1(CommandResponse):
     result: str
 
-class Event1(Event[Input1, Output1]):
+class Command1(Command[Input1, Output1]):
     pass
 
 @dataclass
-class Input2(EventInput):
+class Input2(CommandRequest):
     value: str
 
 @dataclass
-class Output2(EventOutput):
+class Output2(CommandResponse):
     result: str
 
-class Event2(Event[Input2, Output2]):
+class Command2(Command[Input2, Output2]):
     pass
 """)
 
@@ -243,7 +243,7 @@ class Event2(Event[Input2, Output2]):
             from pymodules.contrib.api import ModuleRouter
 
             router = ModuleRouter(host)
-            count = router.discover_events("count_pkg")
+            count = router.discover_commands("count_pkg")
 
             assert count == 2
         finally:

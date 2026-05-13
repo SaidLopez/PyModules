@@ -1,7 +1,7 @@
 """Full stack example combining all PyModules layers.
 
 This example demonstrates the complete flow:
-    Events → Modules → Database → REST API
+    Commands -> Modules -> Database -> REST API
 
 Requirements:
     pip install 'pymodules[web]'
@@ -12,7 +12,6 @@ Run:
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -21,10 +20,16 @@ from fastapi import FastAPI
 from sqlalchemy import Column, String
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
+from pymodules import (
+    Command,
+    CommandRequest,
+    CommandResponse,
+    Module,
+    ModuleHost,
+    module,
+)
 from pymodules.contrib.api import ModuleRouter, api_endpoint, register_error_handlers
 from pymodules.contrib.db import Base, BaseRepository, SoftDeleteMixin, TimestampMixin, UUIDMixin
-
 
 # =============================================================================
 # Database Model
@@ -45,21 +50,21 @@ class Task(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
 
 
 # =============================================================================
-# Event Definitions
+# Command Definitions
 # =============================================================================
 
 
 @dataclass
-class CreateTaskInput(EventInput):
-    """Input for creating a task."""
+class CreateTaskInput(CommandRequest):
+    """Request payload for creating a task."""
 
     title: str
     description: str = ""
 
 
 @dataclass
-class CreateTaskOutput(EventOutput):
-    """Output after creating a task."""
+class CreateTaskOutput(CommandResponse):
+    """Response after creating a task."""
 
     id: str
     title: str
@@ -68,15 +73,15 @@ class CreateTaskOutput(EventOutput):
 
 
 @dataclass
-class GetTaskInput(EventInput):
-    """Input for getting a task by ID."""
+class GetTaskInput(CommandRequest):
+    """Request payload for getting a task by ID."""
 
     task_id: str
 
 
 @dataclass
-class GetTaskOutput(EventOutput):
-    """Output for a single task."""
+class GetTaskOutput(CommandResponse):
+    """Response for a single task."""
 
     id: str
     title: str
@@ -87,8 +92,8 @@ class GetTaskOutput(EventOutput):
 
 
 @dataclass
-class ListTasksInput(EventInput):
-    """Input for listing tasks."""
+class ListTasksInput(CommandRequest):
+    """Request payload for listing tasks."""
 
     limit: int = 10
     offset: int = 0
@@ -96,16 +101,16 @@ class ListTasksInput(EventInput):
 
 
 @dataclass
-class ListTasksOutput(EventOutput):
-    """Output for task listing."""
+class ListTasksOutput(CommandResponse):
+    """Response for task listing."""
 
     tasks: list[dict[str, Any]]
     total: int
 
 
 @dataclass
-class UpdateTaskInput(EventInput):
-    """Input for updating a task."""
+class UpdateTaskInput(CommandRequest):
+    """Request payload for updating a task."""
 
     task_id: str
     title: str | None = None
@@ -114,8 +119,8 @@ class UpdateTaskInput(EventInput):
 
 
 @dataclass
-class UpdateTaskOutput(EventOutput):
-    """Output after updating a task."""
+class UpdateTaskOutput(CommandResponse):
+    """Response after updating a task."""
 
     id: str
     title: str
@@ -124,31 +129,31 @@ class UpdateTaskOutput(EventOutput):
 
 
 @dataclass
-class DeleteTaskInput(EventInput):
-    """Input for deleting a task."""
+class DeleteTaskInput(CommandRequest):
+    """Request payload for deleting a task."""
 
     task_id: str
     hard_delete: bool = False
 
 
 @dataclass
-class DeleteTaskOutput(EventOutput):
-    """Output after deleting a task."""
+class DeleteTaskOutput(CommandResponse):
+    """Response after deleting a task."""
 
     success: bool
     message: str
 
 
 @dataclass
-class CompleteTaskInput(EventInput):
-    """Input for completing a task."""
+class CompleteTaskInput(CommandRequest):
+    """Request payload for completing a task."""
 
     task_id: str
 
 
 @dataclass
-class CompleteTaskOutput(EventOutput):
-    """Output after completing a task."""
+class CompleteTaskOutput(CommandResponse):
+    """Response after completing a task."""
 
     id: str
     title: str
@@ -156,12 +161,12 @@ class CompleteTaskOutput(EventOutput):
 
 
 # =============================================================================
-# Event Classes
+# Command Classes
 # =============================================================================
 
 
-class CreateTask(Event[CreateTaskInput, CreateTaskOutput]):
-    """Event to create a new task.
+class CreateTask(Command[CreateTaskInput, CreateTaskOutput]):
+    """Command to create a new task.
 
     Convention: 'create' + 'Task' -> POST /tasks
     """
@@ -169,8 +174,8 @@ class CreateTask(Event[CreateTaskInput, CreateTaskOutput]):
     pass
 
 
-class GetTask(Event[GetTaskInput, GetTaskOutput]):
-    """Event to get a task by ID.
+class GetTask(Command[GetTaskInput, GetTaskOutput]):
+    """Command to get a task by ID.
 
     Convention: 'get' + 'Task' -> GET /tasks/{id}
     """
@@ -178,8 +183,8 @@ class GetTask(Event[GetTaskInput, GetTaskOutput]):
     pass
 
 
-class ListTasks(Event[ListTasksInput, ListTasksOutput]):
-    """Event to list all tasks.
+class ListTasks(Command[ListTasksInput, ListTasksOutput]):
+    """Command to list all tasks.
 
     Convention: 'list' + 'Tasks' -> GET /tasks
     """
@@ -187,8 +192,8 @@ class ListTasks(Event[ListTasksInput, ListTasksOutput]):
     pass
 
 
-class UpdateTask(Event[UpdateTaskInput, UpdateTaskOutput]):
-    """Event to update a task.
+class UpdateTask(Command[UpdateTaskInput, UpdateTaskOutput]):
+    """Command to update a task.
 
     Convention: 'update' + 'Task' -> PUT /tasks/{id}
     """
@@ -196,8 +201,8 @@ class UpdateTask(Event[UpdateTaskInput, UpdateTaskOutput]):
     pass
 
 
-class DeleteTask(Event[DeleteTaskInput, DeleteTaskOutput]):
-    """Event to delete a task.
+class DeleteTask(Command[DeleteTaskInput, DeleteTaskOutput]):
+    """Command to delete a task.
 
     Convention: 'delete' + 'Task' -> DELETE /tasks/{id}
     """
@@ -211,8 +216,8 @@ class DeleteTask(Event[DeleteTaskInput, DeleteTaskOutput]):
     tags=["Tasks"],
     summary="Mark a task as completed",
 )
-class CompleteTask(Event[CompleteTaskInput, CompleteTaskOutput]):
-    """Event to mark a task as completed.
+class CompleteTask(Command[CompleteTaskInput, CompleteTaskOutput]):
+    """Command to mark a task as completed.
 
     Uses @api_endpoint for custom route.
     """
@@ -227,55 +232,55 @@ class CompleteTask(Event[CompleteTaskInput, CompleteTaskOutput]):
 
 @module(name="tasks", description="Task management module with database persistence")
 class TaskModule(Module):
-    """Module that handles all task-related events with database persistence."""
+    """Module that handles all task-related commands with database persistence."""
 
     def __init__(self, repository: BaseRepository):
         """Initialize with a task repository."""
         self.repo = repository
 
-    def can_handle(self, event: Event) -> bool:
-        """Check if this module handles the event."""
+    def can_handle(self, command: Command) -> bool:
+        """Check if this module handles the command."""
         return isinstance(
-            event,
+            command,
             (CreateTask, GetTask, ListTasks, UpdateTask, DeleteTask, CompleteTask),
         )
 
-    async def handle(self, event: Event) -> None:
-        """Handle task events with database operations."""
-        if isinstance(event, CreateTask):
-            await self._handle_create(event)
-        elif isinstance(event, GetTask):
-            await self._handle_get(event)
-        elif isinstance(event, ListTasks):
-            await self._handle_list(event)
-        elif isinstance(event, UpdateTask):
-            await self._handle_update(event)
-        elif isinstance(event, DeleteTask):
-            await self._handle_delete(event)
-        elif isinstance(event, CompleteTask):
-            await self._handle_complete(event)
+    async def handle(self, command: Command) -> None:
+        """Handle task commands with database operations."""
+        if isinstance(command, CreateTask):
+            await self._handle_create(command)
+        elif isinstance(command, GetTask):
+            await self._handle_get(command)
+        elif isinstance(command, ListTasks):
+            await self._handle_list(command)
+        elif isinstance(command, UpdateTask):
+            await self._handle_update(command)
+        elif isinstance(command, DeleteTask):
+            await self._handle_delete(command)
+        elif isinstance(command, CompleteTask):
+            await self._handle_complete(command)
 
-    async def _handle_create(self, event: CreateTask) -> None:
+    async def _handle_create(self, command: CreateTask) -> None:
         """Handle task creation."""
         task = await self.repo.create(
-            title=event.input.title,
-            description=event.input.description,
+            title=command.input.title,
+            description=command.input.description,
         )
-        event.output = CreateTaskOutput(
+        command.output = CreateTaskOutput(
             id=str(task.id),
             title=task.title,
             description=task.description,
             status=task.status,
         )
-        event.handled = True
+        command.handled = True
 
-    async def _handle_get(self, event: GetTask) -> None:
+    async def _handle_get(self, command: GetTask) -> None:
         """Handle getting a single task."""
-        task = await self.repo.get_by_id(UUID(event.input.task_id))
+        task = await self.repo.get_by_id(UUID(command.input.task_id))
         if not task:
-            raise ValueError(f"Task {event.input.task_id} not found")
+            raise ValueError(f"Task {command.input.task_id} not found")
 
-        event.output = GetTaskOutput(
+        command.output = GetTaskOutput(
             id=str(task.id),
             title=task.title,
             description=task.description,
@@ -283,18 +288,18 @@ class TaskModule(Module):
             created_at=task.created_at.isoformat(),
             updated_at=task.updated_at.isoformat(),
         )
-        event.handled = True
+        command.handled = True
 
-    async def _handle_list(self, event: ListTasks) -> None:
+    async def _handle_list(self, command: ListTasks) -> None:
         """Handle listing tasks."""
         tasks = await self.repo.get_all(
-            limit=event.input.limit,
-            offset=event.input.offset,
-            include_deleted=event.input.include_deleted,
+            limit=command.input.limit,
+            offset=command.input.offset,
+            include_deleted=command.input.include_deleted,
         )
         total = await self.repo.count()
 
-        event.output = ListTasksOutput(
+        command.output = ListTasksOutput(
             tasks=[
                 {
                     "id": str(t.id),
@@ -306,35 +311,35 @@ class TaskModule(Module):
             ],
             total=total,
         )
-        event.handled = True
+        command.handled = True
 
-    async def _handle_update(self, event: UpdateTask) -> None:
+    async def _handle_update(self, command: UpdateTask) -> None:
         """Handle task update."""
         updates = {}
-        if event.input.title is not None:
-            updates["title"] = event.input.title
-        if event.input.description is not None:
-            updates["description"] = event.input.description
-        if event.input.status is not None:
-            updates["status"] = event.input.status
+        if command.input.title is not None:
+            updates["title"] = command.input.title
+        if command.input.description is not None:
+            updates["description"] = command.input.description
+        if command.input.status is not None:
+            updates["status"] = command.input.status
 
-        task = await self.repo.update(UUID(event.input.task_id), **updates)
+        task = await self.repo.update(UUID(command.input.task_id), **updates)
         if not task:
-            raise ValueError(f"Task {event.input.task_id} not found")
+            raise ValueError(f"Task {command.input.task_id} not found")
 
-        event.output = UpdateTaskOutput(
+        command.output = UpdateTaskOutput(
             id=str(task.id),
             title=task.title,
             description=task.description,
             status=task.status,
         )
-        event.handled = True
+        command.handled = True
 
-    async def _handle_delete(self, event: DeleteTask) -> None:
+    async def _handle_delete(self, command: DeleteTask) -> None:
         """Handle task deletion."""
-        task_id = UUID(event.input.task_id)
+        task_id = UUID(command.input.task_id)
 
-        if event.input.hard_delete:
+        if command.input.hard_delete:
             success = await self.repo.delete(task_id)
             message = "Task permanently deleted" if success else "Task not found"
         else:
@@ -342,24 +347,24 @@ class TaskModule(Module):
             success = True
             message = "Task soft deleted"
 
-        event.output = DeleteTaskOutput(success=success, message=message)
-        event.handled = True
+        command.output = DeleteTaskOutput(success=success, message=message)
+        command.handled = True
 
-    async def _handle_complete(self, event: CompleteTask) -> None:
+    async def _handle_complete(self, command: CompleteTask) -> None:
         """Handle marking a task as completed."""
         task = await self.repo.update(
-            UUID(event.input.task_id),
+            UUID(command.input.task_id),
             status="completed",
         )
         if not task:
-            raise ValueError(f"Task {event.input.task_id} not found")
+            raise ValueError(f"Task {command.input.task_id} not found")
 
-        event.output = CompleteTaskOutput(
+        command.output = CompleteTaskOutput(
             id=str(task.id),
             title=task.title,
             status=task.status,
         )
-        event.handled = True
+        command.handled = True
 
 
 # =============================================================================
@@ -379,7 +384,7 @@ def create_app() -> FastAPI:
     This factory creates an app with:
     - In-memory SQLite database
     - Task repository for data access
-    - Task module for event handling
+    - Task module for command handling
     - REST API endpoints via ModuleRouter
     """
     # Create async engine (SQLite for demo, use PostgreSQL in production)
@@ -405,26 +410,26 @@ def create_app() -> FastAPI:
     # Create FastAPI app
     app = FastAPI(
         title="Task Manager API",
-        description="Full-stack example using PyModules with Events, Database, and REST API",
+        description="Full-stack example using PyModules with Commands, Database, and REST API",
         version="1.0.0",
     )
 
     # Register error handlers
     register_error_handlers(app)
 
-    # Create ModuleRouter and register events
+    # Create ModuleRouter and register commands
     router = ModuleRouter(host)
-    router.register_event(CreateTask)
-    router.register_event(GetTask)
-    router.register_event(ListTasks)
-    router.register_event(UpdateTask)
-    router.register_event(DeleteTask)
-    router.register_event(CompleteTask)
+    router.register_command(CreateTask)
+    router.register_command(GetTask)
+    router.register_command(ListTasks)
+    router.register_command(UpdateTask)
+    router.register_command(DeleteTask)
+    router.register_command(CompleteTask)
 
     # Mount router on app
     router.mount(app, prefix="/api/v1")
 
-    # Startup event to initialize database
+    # Startup hook to initialize database
     @app.on_event("startup")
     async def on_startup():
         await init_database(engine)
@@ -455,7 +460,7 @@ PyModules Full Stack Example
 
 This example demonstrates:
   - Database models with mixins (UUID, Timestamps, SoftDelete)
-  - Event-driven architecture with typed Events
+  - Command-driven architecture with typed Commands
   - Module handling with database persistence
   - REST API generation via ModuleRouter
 

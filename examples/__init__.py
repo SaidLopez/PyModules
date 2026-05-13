@@ -2,15 +2,15 @@
 Example modules demonstrating PyModules usage.
 """
 
-from .greet_module import GreeterModule, GreetEvent, GreetInput, GreetOutput
-from .logging_module import LoggingEvent, LoggingInput, LoggingModule, LoggingOutput
+from .greet_module import GreetCommand, GreeterModule, GreetInput, GreetOutput
+from .logging_module import LoggingCommand, LoggingInput, LoggingModule, LoggingOutput
 
 __all__ = [
-    "LoggingEvent",
+    "LoggingCommand",
     "LoggingInput",
     "LoggingOutput",
     "LoggingModule",
-    "GreetEvent",
+    "GreetCommand",
     "GreetInput",
     "GreetOutput",
     "GreeterModule",

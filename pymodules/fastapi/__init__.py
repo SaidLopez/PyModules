@@ -30,15 +30,15 @@ warnings.warn(
     stacklevel=2,
 )
 
-from .integration import PyModulesAPI, event_endpoint  # noqa: E402
+from .integration import PyModulesAPI, command_endpoint  # noqa: E402
 
 __all__ = [
     # Legacy exports
     "PyModulesAPI",
-    "event_endpoint",
+    "command_endpoint",
     # New API re-exports (with deprecation)
     "ModuleRouter",
-    "EventDiscovery",
+    "CommandDiscovery",
     "api_endpoint",
     "exclude_from_api",
     "APIError",
@@ -52,7 +52,7 @@ def __getattr__(name: str):
     # Re-export from pymodules.contrib.api with deprecation warning
     if name in (
         "ModuleRouter",
-        "EventDiscovery",
+        "CommandDiscovery",
         "api_endpoint",
         "exclude_from_api",
         "APIError",

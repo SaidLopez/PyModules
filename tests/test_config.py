@@ -6,9 +6,9 @@ import logging
 from dataclasses import dataclass
 
 from pymodules import (
-    Event,
-    EventInput,
-    EventOutput,
+    Command,
+    CommandRequest,
+    CommandResponse,
     Metrics,
     Module,
     ModuleHost,
@@ -18,28 +18,28 @@ from pymodules import (
 
 
 @dataclass
-class ConfigInput(EventInput):
+class ConfigInput(CommandRequest):
     value: str = ""
 
 
 @dataclass
-class ConfigOutput(EventOutput):
+class ConfigOutput(CommandResponse):
     result: str = ""
 
 
-class ConfigEvent(Event[ConfigInput, ConfigOutput]):
+class ConfigCommand(Command[ConfigInput, ConfigOutput]):
     name = "test.config"
 
 
 @module(name="ConfigModule")
 class ConfigModule(Module):
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, ConfigEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, ConfigCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, ConfigEvent):
-            event.output = ConfigOutput(result=f"processed: {event.input.value}")
-            event.handled = True
+    def handle(self, command: Command) -> None:
+        if isinstance(command, ConfigCommand):
+            command.output = ConfigOutput(result=f"processed: {command.input.value}")
+            command.handled = True
 
 
 class TestModuleHostConfig:
@@ -58,7 +58,7 @@ class TestModuleHostConfig:
 
     def test_custom_config(self):
         """Test custom configuration values."""
-        error_handler = lambda e, ev: None
+        error_handler = lambda e, c: None
 
         config = ModuleHostConfig(
             max_workers=16,
@@ -125,22 +125,22 @@ class TestMetrics:
         host = ModuleHost(config=config)
         host.register(ConfigModule())
 
-        # Dispatch handled event
-        event = ConfigEvent(input=ConfigInput(value="test"))
-        host.handle(event)
+        # Dispatch handled command
+        command = ConfigCommand(input=ConfigInput(value="test"))
+        host.dispatch(command)
 
         assert host.metrics.events_dispatched == 1
         assert host.metrics.events_handled == 1
         assert host.metrics.events_unhandled == 0
 
-    def test_metrics_unhandled_event(self):
-        """Test metrics for unhandled events."""
+    def test_metrics_unhandled_command(self):
+        """Test metrics for unhandled commands."""
         config = ModuleHostConfig(enable_metrics=True)
         host = ModuleHost(config=config)
         # No modules registered
 
-        event = ConfigEvent(input=ConfigInput(value="test"))
-        host.handle(event)
+        command = ConfigCommand(input=ConfigInput(value="test"))
+        host.dispatch(command)
 
         assert host.metrics.events_dispatched == 1
         assert host.metrics.events_handled == 0
@@ -152,8 +152,8 @@ class TestMetrics:
         host = ModuleHost(config=config)
         host.register(ConfigModule())
 
-        event = ConfigEvent(input=ConfigInput(value="test"))
-        host.handle(event)
+        command = ConfigCommand(input=ConfigInput(value="test"))
+        host.dispatch(command)
 
         metrics_dict = host.metrics.to_dict()
         assert isinstance(metrics_dict, dict)
@@ -181,56 +181,56 @@ class TestMetrics:
         assert metrics.modules_registered == 5
 
 
-class TestEventHooks:
-    """Tests for event lifecycle hooks."""
+class TestLifecycleHooks:
+    """Tests for lifecycle callbacks."""
 
     def test_on_event_start_callback(self):
         """Test on_event_start is called."""
-        started_events = []
+        started = []
 
-        def on_start(event):
-            started_events.append(event)
+        def on_start(command):
+            started.append(command)
 
         config = ModuleHostConfig(on_event_start=on_start)
         host = ModuleHost(config=config)
         host.register(ConfigModule())
 
-        event = ConfigEvent(input=ConfigInput(value="test"))
-        host.handle(event)
+        command = ConfigCommand(input=ConfigInput(value="test"))
+        host.dispatch(command)
 
-        assert len(started_events) == 1
-        assert started_events[0] is event
+        assert len(started) == 1
+        assert started[0] is command
 
     def test_on_event_end_callback(self):
         """Test on_event_end is called."""
-        ended_events = []
+        ended = []
 
-        def on_end(event, handled):
-            ended_events.append((event, handled))
+        def on_end(command, handled):
+            ended.append((command, handled))
 
         config = ModuleHostConfig(on_event_end=on_end)
         host = ModuleHost(config=config)
         host.register(ConfigModule())
 
-        event = ConfigEvent(input=ConfigInput(value="test"))
-        host.handle(event)
+        command = ConfigCommand(input=ConfigInput(value="test"))
+        host.dispatch(command)
 
-        assert len(ended_events) == 1
-        assert ended_events[0][0] is event
-        assert ended_events[0][1] is True
+        assert len(ended) == 1
+        assert ended[0][0] is command
+        assert ended[0][1] is True
 
     def test_callback_error_does_not_break_dispatch(self):
-        """Test that callback errors don't break event dispatch."""
+        """Test that callback errors don't break dispatch."""
 
-        def failing_callback(event):
+        def failing_callback(command):
             raise RuntimeError("Callback failed")
 
         config = ModuleHostConfig(on_event_start=failing_callback)
         host = ModuleHost(config=config)
         host.register(ConfigModule())
 
-        event = ConfigEvent(input=ConfigInput(value="test"))
+        command = ConfigCommand(input=ConfigInput(value="test"))
         # Should not raise
-        result = host.handle(event)
+        result = host.dispatch(command)
 
         assert result.handled is True

@@ -5,12 +5,12 @@ Run with: python -m examples.demo
 """
 
 from examples.calculator_module import (
-    CalculatorEvent,
+    CalculatorCommand,
     CalculatorInput,
     CalculatorModule,
 )
-from examples.greet_module import GreeterModule, GreetEvent, GreetInput
-from examples.logging_module import LoggingEvent, LoggingInput, LoggingModule, LogLevel
+from examples.greet_module import GreetCommand, GreeterModule, GreetInput
+from examples.logging_module import LoggingCommand, LoggingInput, LoggingModule, LogLevel
 from pymodules import ModuleHost
 
 
@@ -31,50 +31,48 @@ def main():
 
     # Example 1: Simple greeting
     print("\n--- Example 1: Simple Greeting ---")
-    greet = GreetEvent(input=GreetInput(name="World"))
-    host.handle(greet)
+    greet = GreetCommand(input=GreetInput(name="World"))
+    host.dispatch(greet)
     print(f"Result: {greet.output.message}")
     print(f"Handled: {greet.handled}")
 
     # Example 2: Formal greeting
     print("\n--- Example 2: Formal Greeting ---")
-    formal_greet = GreetEvent(input=GreetInput(name="Dr. Smith", formal=True))
-    host.handle(formal_greet)
+    formal_greet = GreetCommand(input=GreetInput(name="Dr. Smith", formal=True))
+    host.dispatch(formal_greet)
     print(f"Result: {formal_greet.output.message}")
 
     # Example 3: Logging (cross-cutting concern)
-    print("\n--- Example 3: Logging Event ---")
-    log = LoggingEvent(
+    print("\n--- Example 3: Logging Command ---")
+    log = LoggingCommand(
         input=LoggingInput(
             level=LogLevel.INFO,
             message="User {} performed action: {}",
             args=["alice", "login"],
         )
     )
-    host.handle(log)
+    host.dispatch(log)
 
-    # Example 4: Module dispatching events to other modules
+    # Example 4: Module dispatching commands to other modules
     print("\n--- Example 4: Module-to-Module Communication ---")
-    print("(The GreeterModule could log via LoggingEvent through host)")
+    print("(The GreeterModule could log via LoggingCommand through host)")
 
     # Show that modules can access the host
     greeter = host.get_module_by_name("Greeter")
     if greeter and greeter.host:
-        log_event = LoggingEvent(
+        log_cmd = LoggingCommand(
             input=LoggingInput(level=LogLevel.DEBUG, message="Greeter module is active")
         )
-        greeter.host.handle(log_event)
+        greeter.host.dispatch(log_cmd)
 
     # Example 5: Calculator
     print("\n--- Example 5: Calculator ---")
-    calc = CalculatorEvent(input=CalculatorInput(a=1, b=2, operation="+"))
-    host.handle(calc)
-    calc_log_event = LoggingEvent(
-        input=LoggingInput(
-            level=LogLevel.INFO, message=f"Calculator result: {calc.output.result}"
-        )
+    calc = CalculatorCommand(input=CalculatorInput(a=1, b=2, operation="+"))
+    host.dispatch(calc)
+    calc_log_cmd = LoggingCommand(
+        input=LoggingInput(level=LogLevel.INFO, message=f"Calculator result: {calc.output.result}")
     )
-    host.handle(calc_log_event)
+    host.dispatch(calc_log_cmd)
 
     print("\n" + "=" * 50)
     print("Demo complete!")

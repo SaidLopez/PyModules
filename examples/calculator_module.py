@@ -4,12 +4,12 @@ This is a calculator module as a simple example
 
 from dataclasses import dataclass
 
-from pymodules import Event, EventInput, EventOutput, Module, module
+from pymodules import Command, CommandRequest, CommandResponse, Module, module
 
 
 @dataclass
-class CalculatorInput(EventInput):
-    """Input for calculator events."""
+class CalculatorInput(CommandRequest):
+    """Request for calculator commands."""
 
     a: int = 0
     b: int = 0
@@ -17,14 +17,14 @@ class CalculatorInput(EventInput):
 
 
 @dataclass
-class CalculatorOutput(EventOutput):
-    """Output from calculator - the result of the operation."""
+class CalculatorOutput(CommandResponse):
+    """Response from calculator - the result of the operation."""
 
     result: int = 0
 
 
-class CalculatorEvent(Event[CalculatorInput, CalculatorOutput]):
-    """Event requesting a calculator operation."""
+class CalculatorCommand(Command[CalculatorInput, CalculatorOutput]):
+    """Command requesting a calculator operation."""
 
     name = "pymodules.calculator"
 
@@ -38,19 +38,19 @@ class CalculatorModule(Module):
         host = ModuleHost()
         host.register(CalculatorModule())
 
-        event = CalculatorEvent(input=CalculatorInput(a=1, b=2, operation="+"))
-        host.handle(event)
-        print(event.output.result)  # 3
+        command = CalculatorCommand(input=CalculatorInput(a=1, b=2, operation="+"))
+        host.dispatch(command)
+        print(command.output.result)  # 3
     """
 
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, CalculatorEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, CalculatorCommand)
 
-    def handle(self, event: Event) -> None:
-        if not isinstance(event, CalculatorEvent):
+    def handle(self, command: Command) -> None:
+        if not isinstance(command, CalculatorCommand):
             return
 
-        inp = event.input
+        inp = command.input
         if inp.operation == "+":
             result = inp.a + inp.b
         elif inp.operation == "-":
@@ -60,8 +60,8 @@ class CalculatorModule(Module):
         elif inp.operation == "/":
             result = inp.a / inp.b
         else:
-            event.handled = False
+            command.handled = False
             return
 
-        event.output = CalculatorOutput(result=result)
-        event.handled = True
+        command.output = CalculatorOutput(result=result)
+        command.handled = True

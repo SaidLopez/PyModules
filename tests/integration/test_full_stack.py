@@ -1,4 +1,4 @@
-"""End-to-end integration tests for complete event → module → db → api flow."""
+"""End-to-end integration tests for the complete command -> module -> db -> api flow."""
 
 from __future__ import annotations
 
@@ -10,7 +10,14 @@ import pytest
 from sqlalchemy import Column, String
 from sqlalchemy.orm import declarative_base
 
-from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
+from pymodules import (
+    Command,
+    CommandRequest,
+    CommandResponse,
+    Module,
+    ModuleHost,
+    module,
+)
 from pymodules.contrib.db.mixins import UUIDType
 
 # Define Base and model at module level to avoid SQLAlchemy redefinition issues
@@ -27,85 +34,85 @@ class IntegrationUser(IntegrationBase):
     email = Column(String(255), nullable=False)
 
 
-# Define event types at module level
+# Define command types at module level
 @dataclass
-class CreateUserInput(EventInput):
+class CreateUserInput(CommandRequest):
     name: str
     email: str
 
 
 @dataclass
-class CreateUserOutput(EventOutput):
+class CreateUserOutput(CommandResponse):
     id: str
     name: str
     email: str
 
 
 @dataclass
-class GetUserInput(EventInput):
+class GetUserInput(CommandRequest):
     id: str = ""  # Matches route convention {id}, injected from path
 
 
 @dataclass
-class GetUserOutput(EventOutput):
+class GetUserOutput(CommandResponse):
     id: str
     name: str
     email: str
 
 
 @dataclass
-class ListUsersInput(EventInput):
+class ListUsersInput(CommandRequest):
     limit: int = 10
     offset: int = 0
 
 
 @dataclass
-class ListUsersOutput(EventOutput):
+class ListUsersOutput(CommandResponse):
     users: list
     total: int
 
 
 @dataclass
-class UpdateUserInput(EventInput):
+class UpdateUserInput(CommandRequest):
     id: str = ""  # Matches route convention {id}, injected from path
     name: str | None = None
     email: str | None = None
 
 
 @dataclass
-class UpdateUserOutput(EventOutput):
+class UpdateUserOutput(CommandResponse):
     id: str
     name: str
     email: str
 
 
 @dataclass
-class DeleteUserInput(EventInput):
+class DeleteUserInput(CommandRequest):
     id: str = ""  # Matches route convention {id}, injected from path
 
 
 @dataclass
-class DeleteUserOutput(EventOutput):
+class DeleteUserOutput(CommandResponse):
     success: bool
 
 
-class CreateUser(Event[CreateUserInput, CreateUserOutput]):
+class CreateUser(Command[CreateUserInput, CreateUserOutput]):
     pass
 
 
-class GetUser(Event[GetUserInput, GetUserOutput]):
+class GetUser(Command[GetUserInput, GetUserOutput]):
     pass
 
 
-class ListUsers(Event[ListUsersInput, ListUsersOutput]):
+class ListUsers(Command[ListUsersInput, ListUsersOutput]):
     pass
 
 
-class UpdateUser(Event[UpdateUserInput, UpdateUserOutput]):
+class UpdateUser(Command[UpdateUserInput, UpdateUserOutput]):
     pass
 
 
-class DeleteUser(Event[DeleteUserInput, DeleteUserOutput]):
+class DeleteUser(Command[DeleteUserInput, DeleteUserOutput]):
     pass
 
 
@@ -134,59 +141,59 @@ async def full_stack_setup(tmp_path):
         def __init__(self, repo):
             self.repo = repo
 
-        def can_handle(self, event):
-            return isinstance(event, (CreateUser, GetUser, ListUsers, UpdateUser, DeleteUser))
+        def can_handle(self, command):
+            return isinstance(command, (CreateUser, GetUser, ListUsers, UpdateUser, DeleteUser))
 
-        async def handle(self, event):
-            if isinstance(event, CreateUser):
+        async def handle(self, command):
+            if isinstance(command, CreateUser):
                 user = await self.repo.create(
-                    name=event.input.name,
-                    email=event.input.email,
+                    name=command.input.name,
+                    email=command.input.email,
                 )
-                event.output = CreateUserOutput(
+                command.output = CreateUserOutput(
                     id=str(user.id),
                     name=user.name,
                     email=user.email,
                 )
-                event.handled = True
-            elif isinstance(event, GetUser):
-                user = await self.repo.get_by_id(UUID(event.input.id))
+                command.handled = True
+            elif isinstance(command, GetUser):
+                user = await self.repo.get_by_id(UUID(command.input.id))
                 if not user:
                     raise ValueError("User not found")
-                event.output = GetUserOutput(
+                command.output = GetUserOutput(
                     id=str(user.id),
                     name=user.name,
                     email=user.email,
                 )
-                event.handled = True
-            elif isinstance(event, ListUsers):
+                command.handled = True
+            elif isinstance(command, ListUsers):
                 users = await self.repo.get_all(
-                    limit=event.input.limit,
-                    offset=event.input.offset,
+                    limit=command.input.limit,
+                    offset=command.input.offset,
                 )
                 total = await self.repo.count()
-                event.output = ListUsersOutput(
+                command.output = ListUsersOutput(
                     users=[{"id": str(u.id), "name": u.name} for u in users],
                     total=total,
                 )
-                event.handled = True
-            elif isinstance(event, UpdateUser):
+                command.handled = True
+            elif isinstance(command, UpdateUser):
                 updates = {}
-                if event.input.name:
-                    updates["name"] = event.input.name
-                if event.input.email:
-                    updates["email"] = event.input.email
-                user = await self.repo.update(UUID(event.input.id), **updates)
-                event.output = UpdateUserOutput(
+                if command.input.name:
+                    updates["name"] = command.input.name
+                if command.input.email:
+                    updates["email"] = command.input.email
+                user = await self.repo.update(UUID(command.input.id), **updates)
+                command.output = UpdateUserOutput(
                     id=str(user.id),
                     name=user.name,
                     email=user.email,
                 )
-                event.handled = True
-            elif isinstance(event, DeleteUser):
-                result = await self.repo.delete(UUID(event.input.id))
-                event.output = DeleteUserOutput(success=result)
-                event.handled = True
+                command.handled = True
+            elif isinstance(command, DeleteUser):
+                result = await self.repo.delete(UUID(command.input.id))
+                command.output = DeleteUserOutput(success=result)
+                command.handled = True
 
     # Set up host
     host = ModuleHost()
@@ -196,7 +203,7 @@ async def full_stack_setup(tmp_path):
     return {
         "host": host,
         "engine": engine,
-        "events": {
+        "commands": {
             "CreateUser": CreateUser,
             "GetUser": GetUser,
             "ListUsers": ListUsers,
@@ -214,7 +221,7 @@ async def full_stack_setup(tmp_path):
 
 
 class TestFullStackIntegration:
-    """Tests for complete event → module → db → api flow."""
+    """Tests for complete command -> module -> db -> api flow."""
 
     @pytest.mark.asyncio
     async def test_create_entity_via_api(self, full_stack_setup) -> None:
@@ -226,11 +233,11 @@ class TestFullStackIntegration:
 
         setup = full_stack_setup
         host = setup["host"]
-        events = setup["events"]
+        commands = setup["commands"]
 
         app = FastAPI()
         router = ModuleRouter(host)
-        router.register_event(events["CreateUser"])
+        router.register_command(commands["CreateUser"])
         app.include_router(router.router)
 
         client = TestClient(app)
@@ -254,15 +261,15 @@ class TestFullStackIntegration:
         """Test getting an entity through the full stack."""
         setup = full_stack_setup
         host = setup["host"]
-        events = setup["events"]
+        commands = setup["commands"]
         inputs = setup["inputs"]
 
-        # First create a user via event
-        create_event = events["CreateUser"](
+        # First create a user via command
+        create_cmd = commands["CreateUser"](
             input=inputs["CreateUserInput"](name="Jane", email="jane@example.com")
         )
-        await host.handle_async(create_event)
-        user_id = create_event.output.id
+        await host.dispatch_async(create_cmd)
+        user_id = create_cmd.output.id
 
         # Now test getting via API
         from fastapi import FastAPI
@@ -272,7 +279,7 @@ class TestFullStackIntegration:
 
         app = FastAPI()
         router = ModuleRouter(host)
-        router.register_event(events["GetUser"])
+        router.register_command(commands["GetUser"])
         app.include_router(router.router)
 
         client = TestClient(app)
@@ -290,15 +297,15 @@ class TestFullStackIntegration:
         """Test listing entities through the full stack."""
         setup = full_stack_setup
         host = setup["host"]
-        events = setup["events"]
+        commands = setup["commands"]
         inputs = setup["inputs"]
 
         # Create a few users
         for i in range(3):
-            event = events["CreateUser"](
+            cmd = commands["CreateUser"](
                 input=inputs["CreateUserInput"](name=f"User {i}", email=f"user{i}@example.com")
             )
-            await host.handle_async(event)
+            await host.dispatch_async(cmd)
 
         # Test listing via API
         from fastapi import FastAPI
@@ -308,7 +315,7 @@ class TestFullStackIntegration:
 
         app = FastAPI()
         router = ModuleRouter(host)
-        router.register_event(events["ListUsers"])
+        router.register_command(commands["ListUsers"])
         app.include_router(router.router)
 
         client = TestClient(app)
@@ -329,15 +336,15 @@ class TestFullStackIntegration:
         """Test updating an entity through the full stack."""
         setup = full_stack_setup
         host = setup["host"]
-        events = setup["events"]
+        commands = setup["commands"]
         inputs = setup["inputs"]
 
         # Create user
-        create_event = events["CreateUser"](
+        create_cmd = commands["CreateUser"](
             input=inputs["CreateUserInput"](name="Original", email="original@example.com")
         )
-        await host.handle_async(create_event)
-        user_id = create_event.output.id
+        await host.dispatch_async(create_cmd)
+        user_id = create_cmd.output.id
 
         # Test update via API
         from fastapi import FastAPI
@@ -347,7 +354,7 @@ class TestFullStackIntegration:
 
         app = FastAPI()
         router = ModuleRouter(host)
-        router.register_event(events["UpdateUser"])
+        router.register_command(commands["UpdateUser"])
         app.include_router(router.router)
 
         client = TestClient(app)
@@ -365,15 +372,15 @@ class TestFullStackIntegration:
         """Test deleting an entity through the full stack."""
         setup = full_stack_setup
         host = setup["host"]
-        events = setup["events"]
+        commands = setup["commands"]
         inputs = setup["inputs"]
 
         # Create user
-        create_event = events["CreateUser"](
+        create_cmd = commands["CreateUser"](
             input=inputs["CreateUserInput"](name="ToDelete", email="delete@example.com")
         )
-        await host.handle_async(create_event)
-        user_id = create_event.output.id
+        await host.dispatch_async(create_cmd)
+        user_id = create_cmd.output.id
 
         # Test delete via API
         from fastapi import FastAPI
@@ -383,7 +390,7 @@ class TestFullStackIntegration:
 
         app = FastAPI()
         router = ModuleRouter(host)
-        router.register_event(events["DeleteUser"])
+        router.register_command(commands["DeleteUser"])
         app.include_router(router.router)
 
         client = TestClient(app)
@@ -406,12 +413,12 @@ class TestFullStackIntegration:
 
         setup = full_stack_setup
         host = setup["host"]
-        events = setup["events"]
+        commands = setup["commands"]
 
         app = FastAPI()
         register_error_handlers(app)
         router = ModuleRouter(host)
-        router.register_event(events["GetUser"])
+        router.register_command(commands["GetUser"])
         app.include_router(router.router)
 
         client = TestClient(app, raise_server_exceptions=False)
@@ -434,7 +441,7 @@ class TestFullStackIntegration:
 
         setup = full_stack_setup
         host = setup["host"]
-        events = setup["events"]
+        commands = setup["commands"]
 
         class TestAuthProvider(AuthProvider):
             async def validate_token(self, token: str) -> TokenClaims | None:
@@ -453,7 +460,7 @@ class TestFullStackIntegration:
         app.add_middleware(AuthMiddleware, provider=TestAuthProvider())
 
         router = ModuleRouter(host)
-        router.register_event(events["CreateUser"])
+        router.register_command(commands["CreateUser"])
         app.include_router(router.router)
 
         client = TestClient(app)

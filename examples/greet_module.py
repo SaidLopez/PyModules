@@ -1,32 +1,32 @@
 """
-Greeter Module - Simple example of a module with typed input/output.
+Greeter Module - Simple example of a module with typed request/response.
 
-This demonstrates the basic pattern of creating events with
-strongly typed input and output dataclasses.
+This demonstrates the basic pattern of creating commands with
+strongly typed request and response dataclasses.
 """
 
 from dataclasses import dataclass
 
-from pymodules import Event, EventInput, EventOutput, Module, module
+from pymodules import Command, CommandRequest, CommandResponse, Module, module
 
 
 @dataclass
-class GreetInput(EventInput):
-    """Input for greeting events."""
+class GreetInput(CommandRequest):
+    """Request payload for greeting commands."""
 
     name: str = "World"
     formal: bool = False
 
 
 @dataclass
-class GreetOutput(EventOutput):
-    """Output from greeting - the generated message."""
+class GreetOutput(CommandResponse):
+    """Response from greeting - the generated message."""
 
     message: str = ""
 
 
-class GreetEvent(Event[GreetInput, GreetOutput]):
-    """Event requesting a greeting message."""
+class GreetCommand(Command[GreetInput, GreetOutput]):
+    """Command requesting a greeting message."""
 
     name = "pymodules.greet"
 
@@ -40,23 +40,23 @@ class GreeterModule(Module):
         host = ModuleHost()
         host.register(GreeterModule())
 
-        event = GreetEvent(input=GreetInput(name="Alice"))
-        host.handle(event)
-        print(event.output.message)  # "Hello, Alice!"
+        command = GreetCommand(input=GreetInput(name="Alice"))
+        host.dispatch(command)
+        print(command.output.message)  # "Hello, Alice!"
     """
 
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, GreetEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, GreetCommand)
 
-    def handle(self, event: Event) -> None:
-        if not isinstance(event, GreetEvent):
+    def handle(self, command: Command) -> None:
+        if not isinstance(command, GreetCommand):
             return
 
-        inp = event.input
+        inp = command.input
         if inp.formal:
             message = f"Good day, {inp.name}. How may I assist you?"
         else:
             message = f"Hello, {inp.name}!"
 
-        event.output = GreetOutput(message=message)
-        event.handled = True
+        command.output = GreetOutput(message=message)
+        command.handled = True

@@ -1,8 +1,9 @@
 """
-Core interfaces for PyModules event system.
+Core interfaces for the PyModules command-dispatch system.
 
-Events are typed messages with Input data and Output response.
-They flow through the ModuleHost to be handled by Modules.
+Commands are typed in-process requests with a CommandRequest payload and a
+CommandResponse. They flow through the ModuleHost and are dispatched to
+exactly one claiming Module.
 """
 
 from dataclasses import dataclass, field
@@ -10,15 +11,15 @@ from typing import Any, Generic, TypeVar
 
 
 @dataclass
-class EventInput:
+class CommandRequest:
     """
-    Base class for event input data.
+    Base class for a command's typed request payload.
 
-    Subclass this to define the input parameters for your event.
+    Subclass this to define the input parameters for your command.
 
     Example:
         @dataclass
-        class GreetInput(EventInput):
+        class GreetRequest(CommandRequest):
             name: str
     """
 
@@ -26,51 +27,52 @@ class EventInput:
 
 
 @dataclass
-class EventOutput:
+class CommandResponse:
     """
-    Base class for event output data.
+    Base class for a command's typed response.
 
-    Subclass this to define the return data from your event handler.
+    Subclass this to define the value returned by your command handler.
 
     Example:
         @dataclass
-        class GreetOutput(EventOutput):
+        class GreetResponse(CommandResponse):
             message: str
     """
 
     pass
 
 
-# Type variables for generic Event (single letters are conventional for TypeVars)
-I = TypeVar("I", bound=EventInput)  # noqa: E741
-O = TypeVar("O", bound=EventOutput)  # noqa: E741
+# Type variables for generic Command (single letters are conventional for TypeVars)
+I = TypeVar("I", bound=CommandRequest)  # noqa: E741
+O = TypeVar("O", bound=CommandResponse)  # noqa: E741
 
 
 @dataclass
-class Event(Generic[I, O]):
+class Command(Generic[I, O]):
     """
-    An event that can be dispatched through a ModuleHost.
+    A command that can be dispatched through a ModuleHost.
 
-    Events carry input data to handlers and receive output data back.
-    The `handled` flag indicates if a module successfully processed the event.
+    Commands carry a typed request into the claiming Module and (today)
+    receive a typed response set on ``output``. The ``handled`` flag
+    indicates whether a Module successfully processed the command.
 
     Attributes:
-        name: Unique identifier for this event type (e.g., "com.example.greet")
-        input: Input data for the event handler
-        output: Output data set by the handler
-        handled: True if a module successfully handled this event
-        meta: Additional metadata that can be passed between modules
+        name: Unique identifier for this command type (e.g., "com.example.greet")
+        input: Request data passed to the handler
+        output: Response data set by the handler
+        handled: True if a Module successfully handled this command
+        meta: Additional metadata that can be passed between Modules
 
     Example:
         @dataclass
-        class GreetInput(EventInput):
+        class GreetRequest(CommandRequest):
             name: str
 
         @dataclass
-        class GreetOutput(EventOutput):
+        class GreetResponse(CommandResponse):
             message: str
 
-        class GreetEvent(Event[GreetInput, GreetOutput]):
+        class GreetCommand(Command[GreetRequest, GreetResponse]):
             name = "example.greet"
     """
 

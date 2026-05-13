@@ -6,23 +6,30 @@ from dataclasses import dataclass
 
 import pytest
 
-from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
+from pymodules import (
+    Command,
+    CommandRequest,
+    CommandResponse,
+    Module,
+    ModuleHost,
+    module,
+)
 
-# Test fixtures - sample events and modules
+# Test fixtures - sample commands and modules
 
 
 @dataclass
-class SampleInput(EventInput):
+class SampleInput(CommandRequest):
     value: str = ""
 
 
 @dataclass
-class SampleOutput(EventOutput):
+class SampleOutput(CommandResponse):
     result: str = ""
 
 
-class SampleEvent(Event[SampleInput, SampleOutput]):
-    name = "test.event"
+class SampleCommand(Command[SampleInput, SampleOutput]):
+    name = "test.command"
 
 
 @module(name="SampleModule", description="A test module")
@@ -31,45 +38,45 @@ class SampleModule(Module):
         super().__init__()
         self.handle_count = 0
 
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, SampleEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, SampleCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, SampleEvent):
+    def handle(self, command: Command) -> None:
+        if isinstance(command, SampleCommand):
             self.handle_count += 1
-            event.output = SampleOutput(result=f"processed: {event.input.value}")
-            event.handled = True
+            command.output = SampleOutput(result=f"processed: {command.input.value}")
+            command.handled = True
 
 
-class UnhandledEvent(Event[SampleInput, SampleOutput]):
+class UnhandledCommand(Command[SampleInput, SampleOutput]):
     name = "test.unhandled"
 
 
 # Tests
 
 
-class TestEventCreation:
-    """Tests for Event, EventInput, EventOutput creation."""
+class TestCommandCreation:
+    """Tests for Command, CommandRequest, CommandResponse creation."""
 
-    def test_create_event_input(self):
+    def test_create_command_request(self):
         inp = SampleInput(value="hello")
         assert inp.value == "hello"
 
-    def test_create_event_output(self):
+    def test_create_command_response(self):
         out = SampleOutput(result="world")
         assert out.result == "world"
 
-    def test_create_event(self):
-        event = SampleEvent(input=SampleInput(value="test"))
-        assert event.name == "test.event"
-        assert event.input.value == "test"
-        assert event.output is None
-        assert event.handled is False
-        assert event.meta == {}
+    def test_create_command(self):
+        command = SampleCommand(input=SampleInput(value="test"))
+        assert command.name == "test.command"
+        assert command.input.value == "test"
+        assert command.output is None
+        assert command.handled is False
+        assert command.meta == {}
 
-    def test_event_meta(self):
-        event = SampleEvent(input=SampleInput(value="test"), meta={"key": "value"})
-        assert event.meta["key"] == "value"
+    def test_command_meta(self):
+        command = SampleCommand(input=SampleInput(value="test"), meta={"key": "value"})
+        assert command.meta["key"] == "value"
 
 
 class TestModuleClass:
@@ -86,13 +93,13 @@ class TestModuleClass:
 
     def test_module_can_handle(self):
         mod = SampleModule()
-        event = SampleEvent(input=SampleInput())
-        assert mod.can_handle(event) is True
+        command = SampleCommand(input=SampleInput())
+        assert mod.can_handle(command) is True
 
-    def test_module_cannot_handle_different_event(self):
+    def test_module_cannot_handle_different_command(self):
         mod = SampleModule()
-        event = UnhandledEvent(input=SampleInput())
-        assert mod.can_handle(event) is False
+        command = UnhandledCommand(input=SampleInput())
+        assert mod.can_handle(command) is False
 
 
 class TestModuleHostClass:
@@ -115,38 +122,38 @@ class TestModuleHostClass:
         assert len(host.modules) == 0
         assert mod.host is None
 
-    def test_handle_event(self):
+    def test_dispatch_command(self):
         host = ModuleHost()
         mod = SampleModule()
         host.register(mod)
 
-        event = SampleEvent(input=SampleInput(value="hello"))
-        result = host.handle(event)
+        command = SampleCommand(input=SampleInput(value="hello"))
+        result = host.dispatch(command)
 
-        assert result is event
-        assert event.handled is True
-        assert event.output.result == "processed: hello"
+        assert result is command
+        assert command.handled is True
+        assert command.output.result == "processed: hello"
         assert mod.handle_count == 1
 
-    def test_unhandled_event(self):
+    def test_unhandled_command(self):
         host = ModuleHost()
         mod = SampleModule()
         host.register(mod)
 
-        event = UnhandledEvent(input=SampleInput(value="test"))
-        result = host.handle(event)
+        command = UnhandledCommand(input=SampleInput(value="test"))
+        result = host.dispatch(command)
 
-        assert result is event
-        assert event.handled is False
-        assert event.output is None
+        assert result is command
+        assert command.handled is False
+        assert command.output is None
 
     def test_can_handle(self):
         host = ModuleHost()
         mod = SampleModule()
         host.register(mod)
 
-        assert host.can_handle(SampleEvent(input=SampleInput())) is True
-        assert host.can_handle(UnhandledEvent(input=SampleInput())) is False
+        assert host.can_handle(SampleCommand(input=SampleInput())) is True
+        assert host.can_handle(UnhandledCommand(input=SampleInput())) is False
 
     def test_get_module_by_type(self):
         host = ModuleHost()
@@ -179,46 +186,46 @@ class TestMultipleModules:
     """Tests for multiple module handling."""
 
     def test_first_handler_wins(self):
-        """When multiple modules can handle, only first gets the event."""
+        """When multiple modules can handle, only first gets the command."""
         host = ModuleHost()
         mod1 = SampleModule()
         mod2 = SampleModule()
         host.register(mod1)
         host.register(mod2)
 
-        event = SampleEvent(input=SampleInput(value="test"))
-        host.handle(event)
+        command = SampleCommand(input=SampleInput(value="test"))
+        host.dispatch(command)
 
         # First module handles, second should not
         assert mod1.handle_count == 1
         assert mod2.handle_count == 0
 
     def test_module_can_dispatch_to_host(self):
-        """Modules can dispatch events through their host."""
+        """Modules can dispatch commands through their host."""
         host = ModuleHost()
         mod = SampleModule()
         host.register(mod)
 
-        # Simulate a module dispatching an event
-        event = SampleEvent(input=SampleInput(value="from-module"))
-        mod.host.handle(event)
+        # Simulate a module dispatching a command
+        command = SampleCommand(input=SampleInput(value="from-module"))
+        mod.host.dispatch(command)
 
-        assert event.handled is True
-        assert event.output.result == "processed: from-module"
+        assert command.handled is True
+        assert command.output.result == "processed: from-module"
 
 
 @pytest.mark.asyncio
-class TestAsyncHandling:
-    """Tests for async event handling."""
+class TestAsyncDispatch:
+    """Tests for async command dispatch."""
 
-    async def test_handle_async(self):
+    async def test_dispatch_async(self):
         host = ModuleHost()
         mod = SampleModule()
         host.register(mod)
 
-        event = SampleEvent(input=SampleInput(value="async-test"))
-        result = await host.handle_async(event)
+        command = SampleCommand(input=SampleInput(value="async-test"))
+        result = await host.dispatch_async(command)
 
-        assert result is event
-        assert event.handled is True
-        assert event.output.result == "processed: async-test"
+        assert result is command
+        assert command.handled is True
+        assert command.output.result == "processed: async-test"

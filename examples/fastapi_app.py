@@ -6,7 +6,7 @@ Demonstrates production-ready setup with:
 - Metrics endpoint (/metrics)
 - Correlation ID tracing (X-Correlation-ID header)
 - Rate limiting and circuit breaker
-- Event-based endpoints
+- Command-based endpoints
 
 Run with: uvicorn examples.fastapi_app:app --reload
 Visit: http://localhost:8000/docs for Swagger UI
@@ -15,17 +15,15 @@ Visit: http://localhost:8000/docs for Swagger UI
 try:
     from fastapi import FastAPI
 except ImportError as e:
-    raise ImportError(
-        "FastAPI is required. Install with: pip install pymodules[fastapi]"
-    ) from e
+    raise ImportError("FastAPI is required. Install with: pip install pymodules[fastapi]") from e
 
 from examples.calculator_module import (
-    CalculatorEvent,
+    CalculatorCommand,
     CalculatorInput,
     CalculatorModule,
     CalculatorOutput,
 )
-from examples.greet_module import GreeterModule, GreetEvent, GreetInput, GreetOutput
+from examples.greet_module import GreetCommand, GreeterModule, GreetInput, GreetOutput
 from examples.logging_module import LoggingModule
 from pymodules import ModuleHost, ModuleHostConfig
 from pymodules.fastapi import PyModulesAPI
@@ -69,16 +67,16 @@ app = FastAPI(
     Demonstrates PyModules integration with FastAPI.
 
     ## Features
-    - **Event-based routing**: Auto-generated endpoints from event definitions
+    - **Command-based routing**: HTTP endpoints dispatch typed commands
     - **Health checks**: Kubernetes-compatible liveness and readiness probes
-    - **Metrics**: Event processing statistics
+    - **Metrics**: Command processing statistics
     - **Tracing**: Automatic correlation ID injection
 
     ## Endpoints
     - `/greet` - Generate personalized greetings
     - `/calculate` - Perform arithmetic operations
     - `/health` - Health check status
-    - `/metrics` - Event processing metrics
+    - `/metrics` - Command processing metrics
     """,
     version="1.0.0",
 )
@@ -92,11 +90,11 @@ api = PyModulesAPI(host, version="1.0.0")
 # Add production endpoints: health, metrics, and tracing middleware
 api.add_all_endpoints(app)
 
-# Add event-based endpoints
-api.add_event_endpoint(
+# Add command-based endpoints
+api.add_command_endpoint(
     app=app,
     path="/greet",
-    event_class=GreetEvent,
+    command_class=GreetCommand,
     input_class=GreetInput,
     output_class=GreetOutput,
     summary="Generate a greeting",
@@ -104,10 +102,10 @@ api.add_event_endpoint(
     tags=["Greetings"],
 )
 
-api.add_event_endpoint(
+api.add_command_endpoint(
     app=app,
     path="/calculate",
-    event_class=CalculatorEvent,
+    command_class=CalculatorCommand,
     input_class=CalculatorInput,
     output_class=CalculatorOutput,
     summary="Perform calculation",
@@ -123,10 +121,10 @@ api.add_event_endpoint(
 
 @app.post("/greet-formal", tags=["Greetings"])
 async def greet_formal(name: str = "Guest"):
-    """Manual endpoint showing direct event dispatch with formal greeting."""
-    event = GreetEvent(input=GreetInput(name=name, formal=True))
-    await api.dispatch(event)
-    return {"message": event.output.message, "formal": True}
+    """Manual endpoint showing direct command dispatch with formal greeting."""
+    command = GreetCommand(input=GreetInput(name=name, formal=True))
+    await api.dispatch(command)
+    return {"message": command.output.message, "formal": True}
 
 
 @app.get("/modules", tags=["Info"])
@@ -153,7 +151,7 @@ async def root():
         "version": "1.0.0",
         "status": "running",
         "endpoints": {
-            "events": {
+            "commands": {
                 "/greet": "POST - Generate a greeting",
                 "/greet-formal": "POST - Generate a formal greeting",
                 "/calculate": "POST - Perform calculation",
@@ -162,7 +160,7 @@ async def root():
                 "/health": "GET - Full health check",
                 "/health/live": "GET - Liveness probe",
                 "/health/ready": "GET - Readiness probe",
-                "/metrics": "GET - Event processing metrics",
+                "/metrics": "GET - Command processing metrics",
                 "/modules": "GET - List registered modules",
             },
             "documentation": {
@@ -174,7 +172,7 @@ async def root():
 
 
 # =============================================================================
-# Startup/Shutdown Events
+# Startup/Shutdown Hooks (FastAPI lifecycle)
 # =============================================================================
 
 

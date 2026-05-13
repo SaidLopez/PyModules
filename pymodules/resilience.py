@@ -15,7 +15,7 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .interfaces import Event
+    from .interfaces import Command
 
 from .logging import get_logger
 
@@ -41,17 +41,17 @@ class RateLimiter:
     Token bucket rate limiter.
 
     Attributes:
-        rate: Maximum events per second.
+        rate: Maximum commands per second.
         burst: Maximum burst size (bucket capacity).
         block: If True, block until tokens available. If False, raise RateLimitExceeded.
 
     Example:
         limiter = RateLimiter(rate=100, burst=10)
         if limiter.acquire():
-            process_event()
+            process_command()
     """
 
-    rate: float = 100.0  # events per second
+    rate: float = 100.0  # commands per second
     burst: int = 10  # max burst size
     block: bool = False  # block or raise
 
@@ -395,7 +395,7 @@ class RetryPolicy:
 class DeadLetterEntry:
     """An entry in the dead letter queue."""
 
-    event: "Event"
+    command: "Command"
     error: Exception
     timestamp: float = field(default_factory=time.time)
     attempts: int = 1
@@ -404,17 +404,17 @@ class DeadLetterEntry:
 
 class DeadLetterQueue:
     """
-    Dead letter queue for failed events.
+    Dead letter queue for failed commands.
 
-    Stores events that failed processing for later inspection or reprocessing.
+    Stores commands that failed processing for later inspection or reprocessing.
 
     Example:
         dlq = DeadLetterQueue(max_size=1000)
 
-        # Events are added automatically by ModuleHost when configured
+        # Failed commands are added automatically by ModuleHost when configured
         # Later, inspect or reprocess:
         for entry in dlq.entries:
-            print(f"Failed: {entry.event.name} - {entry.error}")
+            print(f"Failed: {entry.command.name} - {entry.error}")
 
         # Reprocess all
         dlq.reprocess(host)
@@ -439,14 +439,14 @@ class DeadLetterQueue:
 
     def add(
         self,
-        event: "Event",
+        command: "Command",
         error: Exception,
         module_name: str = "",
         attempts: int = 1,
     ) -> DeadLetterEntry:
-        """Add a failed event to the queue."""
+        """Add a failed command to the queue."""
         entry = DeadLetterEntry(
-            event=event,
+            command=command,
             error=error,
             module_name=module_name,
             attempts=attempts,
@@ -456,8 +456,8 @@ class DeadLetterQueue:
             self._entries.append(entry)
 
         resilience_logger.warning(
-            "Event %s added to DLQ after %d attempts: %s",
-            event.name,
+            "Command %s added to DLQ after %d attempts: %s",
+            command.name,
             attempts,
             error,
         )
@@ -497,14 +497,14 @@ class DeadLetterQueue:
 
     def reprocess(
         self,
-        handler: Callable[["Event"], "Event"],
+        handler: Callable[["Command"], "Command"],
         max_entries: int | None = None,
     ) -> tuple[int, int]:
         """
         Reprocess entries from the queue.
 
         Args:
-            handler: Function to handle events (e.g., host.handle).
+            handler: Function to handle commands (e.g., host.dispatch).
             max_entries: Maximum entries to process (None = all).
 
         Returns:
@@ -524,22 +524,22 @@ class DeadLetterQueue:
 
             processed += 1
             try:
-                # Reset event state
-                entry.event.handled = False
-                entry.event.output = None
+                # Reset command state
+                entry.command.handled = False
+                entry.command.output = None
 
-                handler(entry.event)
+                handler(entry.command)
 
-                if entry.event.handled:
+                if entry.command.handled:
                     successful += 1
                     resilience_logger.info(
-                        "Successfully reprocessed event %s from DLQ",
-                        entry.event.name,
+                        "Successfully reprocessed command %s from DLQ",
+                        entry.command.name,
                     )
                 else:
                     # No handler found, re-add to DLQ
                     self.add(
-                        entry.event,
+                        entry.command,
                         RuntimeError("No handler found on reprocess"),
                         attempts=entry.attempts + 1,
                     )
@@ -547,7 +547,7 @@ class DeadLetterQueue:
             except Exception as e:
                 # Failed again, re-add with incremented attempts
                 self.add(
-                    entry.event,
+                    entry.command,
                     e,
                     module_name=entry.module_name,
                     attempts=entry.attempts + 1,

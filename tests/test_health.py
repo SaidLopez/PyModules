@@ -5,9 +5,9 @@ Tests for health check functionality.
 from dataclasses import dataclass
 
 from pymodules import (
-    Event,
-    EventInput,
-    EventOutput,
+    Command,
+    CommandRequest,
+    CommandResponse,
     Module,
     ModuleHost,
     ModuleHostConfig,
@@ -23,28 +23,28 @@ from pymodules.contrib.health import (
 
 
 @dataclass
-class HealthInput(EventInput):
+class HealthInput(CommandRequest):
     value: str = ""
 
 
 @dataclass
-class HealthOutput(EventOutput):
+class HealthOutput(CommandResponse):
     result: str = ""
 
 
-class HealthEvent(Event[HealthInput, HealthOutput]):
+class HealthCommand(Command[HealthInput, HealthOutput]):
     name = "test.health"
 
 
 @module(name="HealthModule")
 class HealthModule(Module):
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, HealthEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, HealthCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, HealthEvent):
-            event.output = HealthOutput(result="healthy")
-            event.handled = True
+    def handle(self, command: Command) -> None:
+        if isinstance(command, HealthCommand):
+            command.output = HealthOutput(result="healthy")
+            command.handled = True
 
 
 class TestHealthCheckResult:

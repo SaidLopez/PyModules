@@ -1,6 +1,6 @@
 """Route convention engine.
 
-Maps Event names to HTTP methods and REST paths using conventions.
+Maps Command names to HTTP methods and REST paths using conventions.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pymodules import Event
+    from pymodules import Command
 
 
 class HTTPMethod(str, Enum):
@@ -165,22 +165,22 @@ class RouteConvention:
     Override this class to implement custom routing conventions.
     """
 
-    def get_route(self, event_class: type[Event[Any, Any]]) -> RouteInfo:
-        """Get route info for an event class.
+    def get_route(self, command_class: type[Command[Any, Any]]) -> RouteInfo:
+        """Get route info for a command class.
 
         Args:
-            event_class: Event class to generate route for
+            command_class: Command class to generate route for
 
         Returns:
             RouteInfo with path, method, and metadata
         """
-        # Parse event name
-        event_name = getattr(event_class, "name", "") or event_class.__name__
-        if "." in event_name:
-            domain, action = event_name.split(".", 1)
+        # Parse command name
+        command_name = getattr(command_class, "name", "") or command_class.__name__
+        if "." in command_name:
+            domain, action = command_name.split(".", 1)
         else:
             # Try to parse from class name
-            class_name = event_class.__name__
+            class_name = command_class.__name__
             # e.g., CreateUser -> create, user
             action = ""
             domain = class_name.lower()
@@ -214,7 +214,7 @@ class RouteConvention:
             tags=[domain.replace("_", " ").title()],
             summary=f"{action.replace('_', ' ').title()} {domain.replace('_', ' ').title()}",
             requires_id=action in ACTIONS_REQUIRING_ID,
-            id_param_name=f"{domain}_id" if f"{domain}_id" in str(event_class) else "id",
+            id_param_name=f"{domain}_id" if f"{domain}_id" in str(command_class) else "id",
         )
 
     def _pluralize(self, singular: str) -> str:
@@ -234,7 +234,7 @@ class RouteConvention:
 class RESTConvention(RouteConvention):
     """RESTful convention-based route generator.
 
-    Converts event names like "contact.create" into REST paths like "POST /contacts".
+    Converts command names like "contact.create" into REST paths like "POST /contacts".
 
     Convention Rules:
     - Domain names are pluralized (contact -> contacts)
@@ -249,7 +249,7 @@ class RESTConvention(RouteConvention):
 
     Example:
         convention = RESTConvention()
-        route = convention.get_route(CreateUserEvent)
+        route = convention.get_route(CreateUserCommand)
         print(f"{route.method} {route.path}")
     """
 
@@ -267,22 +267,22 @@ class RESTConvention(RouteConvention):
         self._custom_plurals = custom_plurals or {}
         self._path_prefix = path_prefix.rstrip("/")
 
-    def get_route(self, event_class: type[Event[Any, Any]]) -> RouteInfo:
-        """Generate route info from an event class.
+    def get_route(self, command_class: type[Command[Any, Any]]) -> RouteInfo:
+        """Generate route info from a command class.
 
         Args:
-            event_class: Event class to generate route for
+            command_class: Command class to generate route for
 
         Returns:
             RouteInfo with path, method, and metadata
         """
         from .decorators import get_api_metadata
 
-        # Parse event name
-        event_name = getattr(event_class, "name", "") or ""
-        if not event_name or "." not in event_name:
+        # Parse command name
+        command_name = getattr(command_class, "name", "") or ""
+        if not command_name or "." not in command_name:
             # Fall back to class name parsing
-            class_name = event_class.__name__
+            class_name = command_class.__name__
             domain = ""
             action = ""
             for prefix in ["create", "get", "update", "delete", "list", "search", "activate"]:
@@ -294,23 +294,23 @@ class RESTConvention(RouteConvention):
                 domain = class_name.lower()
                 action = "get"
         else:
-            parts = event_name.split(".", 1)
+            parts = command_name.split(".", 1)
             domain = parts[0]
             action = parts[1] if len(parts) > 1 else ""
 
         # Check for custom API metadata
-        api_meta = get_api_metadata(event_class)
+        api_meta = get_api_metadata(command_class)
         if api_meta:
             custom_path = api_meta.get("path")
             custom_method = api_meta.get("method")
             if custom_path or custom_method:
-                return self._create_custom_route(domain, action, api_meta, event_class)
+                return self._create_custom_route(domain, action, api_meta, command_class)
 
         # Use convention-based routing
-        return self._create_convention_route(domain, action, event_class)
+        return self._create_convention_route(domain, action, command_class)
 
     def _create_custom_route(
-        self, domain: str, action: str, api_meta: dict, event_class: type
+        self, domain: str, action: str, api_meta: dict, command_class: type
     ) -> RouteInfo:
         """Create a route from custom API metadata."""
         path = api_meta.get("path") or self._build_path(domain, action)
@@ -327,10 +327,10 @@ class RESTConvention(RouteConvention):
             summary=summary,
             deprecated=api_meta.get("deprecated", False),
             requires_id="{id}" in path or f"{{{domain}_id}}" in path,
-            id_param_name=self._get_id_param_name(domain, event_class),
+            id_param_name=self._get_id_param_name(domain, command_class),
         )
 
-    def _create_convention_route(self, domain: str, action: str, event_class: type) -> RouteInfo:
+    def _create_convention_route(self, domain: str, action: str, command_class: type) -> RouteInfo:
         """Create a route using conventions."""
         path = self._build_path(domain, action)
         method = self._get_method(action)
@@ -342,11 +342,11 @@ class RESTConvention(RouteConvention):
             summary=self._generate_summary(domain, action),
             deprecated=False,
             requires_id=action in ACTIONS_REQUIRING_ID,
-            id_param_name=self._get_id_param_name(domain, event_class),
+            id_param_name=self._get_id_param_name(domain, command_class),
         )
 
     def _build_path(self, domain: str, action: str) -> str:
-        """Build the REST path for an event."""
+        """Build the REST path for a command."""
         domain_plural = self._pluralize(domain)
 
         # Base path is always the pluralized domain
@@ -409,7 +409,7 @@ class RESTConvention(RouteConvention):
         return domain.replace("_", " ").title()
 
     def _generate_summary(self, domain: str, action: str) -> str:
-        """Generate an OpenAPI summary from event metadata."""
+        """Generate an OpenAPI summary from command metadata."""
         action_title = action.replace("_", " ").title()
         domain_title = domain.replace("_", " ").title()
 
@@ -418,9 +418,9 @@ class RESTConvention(RouteConvention):
         else:
             return f"{action_title} {domain_title}"
 
-    def _get_id_param_name(self, domain: str, event_class: type) -> str:
-        """Get the ID parameter name for this event."""
+    def _get_id_param_name(self, domain: str, command_class: type) -> str:
+        """Get the ID parameter name for this command."""
         # Check if input class has a domain-specific ID field
         # This is a simplified version - actual implementation would inspect type hints
         domain_id = f"{domain}_id"
-        return domain_id if domain_id in str(event_class) else "id"
+        return domain_id if domain_id in str(command_class) else "id"

@@ -1,7 +1,7 @@
 """
 FastAPI integration layer for PyModules.
 
-Provides utilities to expose PyModules events as HTTP endpoints,
+Provides utilities to expose PyModules commands as HTTP endpoints,
 with built-in health checks, metrics, and tracing middleware.
 """
 
@@ -13,7 +13,7 @@ from typing import Any
 
 from ..contrib.health import HealthCheck, HealthStatus
 from ..host import ModuleHost
-from ..interfaces import Event, EventInput, EventOutput
+from ..interfaces import Command, CommandRequest, CommandResponse
 
 # FastAPI is optional - only import if available
 try:
@@ -80,7 +80,7 @@ class PyModulesAPI:
     """
     FastAPI integration for PyModules.
 
-    Wraps a ModuleHost and provides utilities to expose events
+    Wraps a ModuleHost and provides utilities to expose commands
     as HTTP endpoints, with built-in health checks and metrics.
 
     Example:
@@ -99,8 +99,8 @@ class PyModulesAPI:
         api.add_metrics_endpoint(app)
         api.add_tracing_middleware(app)
 
-        # Add event endpoint
-        api.add_event_endpoint(app, "/greet", GreetEvent, GreetInput, GreetOutput)
+        # Add command endpoint
+        api.add_command_endpoint(app, "/greet", GreetCommand, GreetRequest, GreetResponse)
     """
 
     def __init__(self, host: ModuleHost, version: str = ""):
@@ -125,72 +125,72 @@ class PyModulesAPI:
             self._health_check = HealthCheck(host=self.host, version=self.version)
         return self._health_check
 
-    async def dispatch(self, event: Event) -> Event:
+    async def dispatch(self, command: Command) -> Command:
         """
-        Dispatch an event through the ModuleHost asynchronously.
+        Dispatch a command through the ModuleHost asynchronously.
 
         Args:
-            event: The event to dispatch
+            command: The command to dispatch
 
         Returns:
-            The event with output set
+            The command with output set
 
         Raises:
-            HTTPException: If no module handled the event
+            HTTPException: If no module handled the command
         """
-        await self.host.handle_async(event)
+        await self.host.dispatch_async(command)
 
-        if not event.handled:
+        if not command.handled:
             raise HTTPException(
-                status_code=404, detail=f"No module found to handle event: {event.name}"
+                status_code=404, detail=f"No module found to handle command: {command.name}"
             )
 
-        return event
+        return command
 
-    def add_event_endpoint(
+    def add_command_endpoint(
         self,
         app: "FastAPI",
         path: str,
-        event_class: type[Event],
-        input_class: type[EventInput],
-        output_class: type[EventOutput] | None = None,
+        command_class: type[Command],
+        input_class: type[CommandRequest],
+        output_class: type[CommandResponse] | None = None,
         method: str = "POST",
         **route_kwargs: Any,
     ) -> None:
         """
-        Add an HTTP endpoint that dispatches an event.
+        Add an HTTP endpoint that dispatches a command.
 
         Args:
             app: FastAPI application
             path: URL path for the endpoint
-            event_class: The Event class to instantiate
-            input_class: The EventInput class (used for request body)
-            output_class: The EventOutput class (used for response model)
+            command_class: The Command class to instantiate
+            input_class: The CommandRequest class (used for request body)
+            output_class: The CommandResponse class (used for response model)
             method: HTTP method (POST, GET, etc.)
             **route_kwargs: Additional arguments for app.add_api_route
         """
         # Create Pydantic models from dataclasses
-        InputModel = _dataclass_to_pydantic(input_class, f"{event_class.__name__}Request")
+        InputModel = _dataclass_to_pydantic(input_class, f"{command_class.__name__}Request")
 
         if output_class:
-            OutputModel = _dataclass_to_pydantic(output_class, f"{event_class.__name__}Response")
+            OutputModel = _dataclass_to_pydantic(output_class, f"{command_class.__name__}Response")
         else:
             OutputModel = None
 
         async def endpoint(request: Request, body: InputModel) -> Any:  # type: ignore
             # Convert Pydantic model back to dataclass
             input_data = input_class(**body.model_dump())
-            event = event_class(input=input_data)
+            command = command_class(input=input_data)
 
             # Add correlation ID from request if available
             if hasattr(request.state, "correlation_id"):
-                event.meta["correlation_id"] = request.state.correlation_id
+                command.meta["correlation_id"] = request.state.correlation_id
 
-            await self.dispatch(event)
+            await self.dispatch(command)
 
-            if event.output and is_dataclass(event.output):
-                return asdict(event.output)
-            return {"handled": event.handled}
+            if command.output and is_dataclass(command.output):
+                return asdict(command.output)
+            return {"handled": command.handled}
 
         app.add_api_route(
             path, endpoint, methods=[method], response_model=OutputModel, **route_kwargs
@@ -283,7 +283,7 @@ class PyModulesAPI:
             """
             Get current metrics from the ModuleHost.
 
-            Returns event processing statistics including dispatched,
+            Returns command processing statistics including dispatched,
             handled, failed, retried, and rate-limited counts.
             """
             result: dict[str, Any] = {
@@ -292,9 +292,9 @@ class PyModulesAPI:
             }
 
             if self.host.metrics:
-                result["events"] = self.host.metrics.to_dict()
+                result["metrics"] = self.host.metrics.to_dict()
             else:
-                result["events"] = {"metrics_enabled": False}
+                result["metrics"] = {"metrics_enabled": False}
 
             # Add module info
             result["modules"] = {
@@ -353,26 +353,28 @@ class PyModulesAPI:
         self.add_tracing_middleware(app)
 
 
-def event_endpoint(
-    event_class: type[Event], input_class: type[EventInput], path: str | None = None
+def command_endpoint(
+    command_class: type[Command],
+    input_class: type[CommandRequest],
+    path: str | None = None,
 ) -> Callable[[Callable], Callable]:
     """
-    Decorator to mark a function as an event endpoint.
+    Decorator to mark a function as a command endpoint.
 
     This is syntactic sugar for manual endpoint creation.
 
     Example:
-        @event_endpoint(GreetEvent, GreetInput, "/greet")
-        async def greet_handler(event: GreetEvent):
-            return event.output
+        @command_endpoint(GreetCommand, GreetRequest, "/greet")
+        async def greet_handler(command: GreetCommand):
+            return command.output
     """
 
     def decorator(func: Callable) -> Callable:
         # Store metadata on the function for later registration
-        func._pymodules_event = {  # type: ignore[attr-defined]
-            "event_class": event_class,
+        func._pymodules_command = {  # type: ignore[attr-defined]
+            "command_class": command_class,
             "input_class": input_class,
-            "path": path or f"/{event_class.name.replace('.', '/')}",
+            "path": path or f"/{command_class.name.replace('.', '/')}",
         }
         return func
 

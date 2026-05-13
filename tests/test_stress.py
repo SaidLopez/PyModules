@@ -12,9 +12,9 @@ from dataclasses import dataclass
 import pytest
 
 from pymodules import (
-    Event,
-    EventInput,
-    EventOutput,
+    Command,
+    CommandRequest,
+    CommandResponse,
     Module,
     ModuleHost,
     ModuleHostConfig,
@@ -23,16 +23,16 @@ from pymodules import (
 
 
 @dataclass
-class StressInput(EventInput):
+class StressInput(CommandRequest):
     value: int = 0
 
 
 @dataclass
-class StressOutput(EventOutput):
+class StressOutput(CommandResponse):
     result: int = 0
 
 
-class StressEvent(Event[StressInput, StressOutput]):
+class StressCommand(Command[StressInput, StressOutput]):
     name = "test.stress"
 
 
@@ -43,76 +43,76 @@ class StressModule(Module):
         self.call_count = 0
         self._lock = threading.Lock()
 
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, StressEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, StressCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, StressEvent):
+    def handle(self, command: Command) -> None:
+        if isinstance(command, StressCommand):
             with self._lock:
                 self.call_count += 1
             # Simulate some work
-            result = event.input.value * 2
-            event.output = StressOutput(result=result)
-            event.handled = True
+            result = command.input.value * 2
+            command.output = StressOutput(result=result)
+            command.handled = True
 
 
 @module(name="SlowModule")
 class SlowModule(Module):
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, StressEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, StressCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, StressEvent):
+    def handle(self, command: Command) -> None:
+        if isinstance(command, StressCommand):
             time.sleep(0.01)  # 10ms delay
-            event.output = StressOutput(result=event.input.value)
-            event.handled = True
+            command.output = StressOutput(result=command.input.value)
+            command.handled = True
 
 
 @pytest.mark.slow
 class TestConcurrentDispatch:
-    """Tests for concurrent event dispatch."""
+    """Tests for concurrent command dispatch."""
 
-    def test_many_sequential_events(self):
-        """Test handling many events sequentially."""
+    def test_many_sequential_commands(self):
+        """Test handling many commands sequentially."""
         host = ModuleHost()
         mod = StressModule()
         host.register(mod)
 
-        num_events = 1000
-        for i in range(num_events):
-            event = StressEvent(input=StressInput(value=i))
-            host.handle(event)
-            assert event.handled
-            assert event.output.result == i * 2
+        num_commands = 1000
+        for i in range(num_commands):
+            command = StressCommand(input=StressInput(value=i))
+            host.dispatch(command)
+            assert command.handled
+            assert command.output.result == i * 2
 
-        assert mod.call_count == num_events
+        assert mod.call_count == num_commands
 
-    def test_concurrent_events_with_thread_pool(self):
-        """Test handling events from multiple threads."""
+    def test_concurrent_commands_with_thread_pool(self):
+        """Test handling commands from multiple threads."""
         config = ModuleHostConfig(max_workers=8)
         host = ModuleHost(config=config)
         mod = StressModule()
         host.register(mod)
 
-        num_events = 100
+        num_commands = 100
         results = []
 
-        def dispatch_event(value):
-            event = StressEvent(input=StressInput(value=value))
-            host.handle(event)
-            return event
+        def dispatch_command(value):
+            command = StressCommand(input=StressInput(value=value))
+            host.dispatch(command)
+            return command
 
         with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [executor.submit(dispatch_event, i) for i in range(num_events)]
+            futures = [executor.submit(dispatch_command, i) for i in range(num_commands)]
             for future in as_completed(futures):
                 results.append(future.result())
 
-        assert len(results) == num_events
-        assert all(e.handled for e in results)
-        assert mod.call_count == num_events
+        assert len(results) == num_commands
+        assert all(c.handled for c in results)
+        assert mod.call_count == num_commands
 
-    def test_async_events_concurrent(self):
-        """Test async handling of concurrent events."""
+    def test_async_commands_concurrent(self):
+        """Test async handling of concurrent commands."""
         import asyncio
 
         config = ModuleHostConfig(max_workers=8)
@@ -122,15 +122,15 @@ class TestConcurrentDispatch:
         async def dispatch_many():
             tasks = []
             for i in range(50):
-                event = StressEvent(input=StressInput(value=i))
-                tasks.append(host.handle_async(event))
+                command = StressCommand(input=StressInput(value=i))
+                tasks.append(host.dispatch_async(command))
 
             results = await asyncio.gather(*tasks)
             return results
 
         results = asyncio.run(dispatch_many())
         assert len(results) == 50
-        assert all(e.handled for e in results)
+        assert all(c.handled for c in results)
 
 
 @pytest.mark.slow
@@ -141,28 +141,28 @@ class TestManyModules:
         """Test performance with many registered modules."""
         host = ModuleHost()
 
-        # Register 100 modules, only the last one handles StressEvent
+        # Register 100 modules, only the last one handles StressCommand
         for i in range(99):
 
             @module(name=f"DummyModule{i}")
             class DummyModule(Module):
-                def can_handle(self, event: Event) -> bool:
+                def can_handle(self, command: Command) -> bool:
                     return False
 
-                def handle(self, event: Event) -> None:
+                def handle(self, command: Command) -> None:
                     pass
 
             host.register(DummyModule())
 
         host.register(StressModule())
 
-        # Dispatch events
+        # Dispatch commands
         start = time.time()
-        num_events = 100
-        for i in range(num_events):
-            event = StressEvent(input=StressInput(value=i))
-            host.handle(event)
-            assert event.handled
+        num_commands = 100
+        for i in range(num_commands):
+            command = StressCommand(input=StressInput(value=i))
+            host.dispatch(command)
+            assert command.handled
 
         elapsed = time.time() - start
         # Should complete in reasonable time (< 1 second)
@@ -183,40 +183,42 @@ class TestResourceCleanup:
         import asyncio
 
         async def run_and_shutdown():
-            # Start events
-            tasks = [host.handle_async(StressEvent(input=StressInput(value=i))) for i in range(5)]
+            # Start commands
+            tasks = [
+                host.dispatch_async(StressCommand(input=StressInput(value=i))) for i in range(5)
+            ]
             # Wait for all
             results = await asyncio.gather(*tasks)
             return results
 
         results = asyncio.run(run_and_shutdown())
-        assert all(e.handled for e in results)
+        assert all(c.handled for c in results)
 
         # Shutdown should complete without error
         host.shutdown(wait=True)
 
-    def test_events_in_progress_tracking(self):
-        """Test that events_in_progress is properly maintained."""
+    def test_commands_in_progress_tracking(self):
+        """Test that commands_in_progress is properly maintained."""
         host = ModuleHost()
         tracking = []
 
         @module(name="TrackingModule")
         class TrackingModule(Module):
-            def can_handle(self, event: Event) -> bool:
-                return isinstance(event, StressEvent)
+            def can_handle(self, command: Command) -> bool:
+                return isinstance(command, StressCommand)
 
-            def handle(self, event: Event) -> None:
-                # Check events_in_progress during handling
-                tracking.append(len(host.events_in_progress))
-                event.handled = True
+            def handle(self, command: Command) -> None:
+                # Check commands_in_progress during handling
+                tracking.append(len(host.commands_in_progress))
+                command.handled = True
 
         host.register(TrackingModule())
 
         for i in range(10):
-            event = StressEvent(input=StressInput(value=i))
-            host.handle(event)
+            command = StressCommand(input=StressInput(value=i))
+            host.dispatch(command)
 
-        # During each handle, there should be exactly 1 event in progress
+        # During each handle, there should be exactly 1 command in progress
         assert all(count == 1 for count in tracking)
-        # After all events, should be empty
-        assert len(host.events_in_progress) == 0
+        # After all commands, should be empty
+        assert len(host.commands_in_progress) == 0

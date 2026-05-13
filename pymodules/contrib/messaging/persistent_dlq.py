@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     import redis.asyncio as redis_async
 
-    from ..interfaces import Event
+    from ...interfaces import Command
 
 logger = get_logger("messaging.dlq")
 
@@ -75,12 +75,12 @@ class PersistentDLQConfig:
 def serialize_entry(entry: DeadLetterEntry) -> dict[str, Any]:
     """Serialize a DeadLetterEntry to a dictionary."""
     return {
-        "event": {
-            "name": entry.event.name,
-            "input": entry.event.input.__dict__ if entry.event.input else None,
-            "output": entry.event.output.__dict__ if entry.event.output else None,
-            "handled": entry.event.handled,
-            "meta": entry.event.meta,
+        "command": {
+            "name": entry.command.name,
+            "input": entry.command.input.__dict__ if entry.command.input else None,
+            "output": entry.command.output.__dict__ if entry.command.output else None,
+            "handled": entry.command.handled,
+            "meta": entry.command.meta,
         },
         "error": str(entry.error),
         "error_type": type(entry.error).__name__,
@@ -92,36 +92,36 @@ def serialize_entry(entry: DeadLetterEntry) -> dict[str, Any]:
 
 def deserialize_entry(data: dict[str, Any]) -> DeadLetterEntry:
     """Deserialize a dictionary to a DeadLetterEntry."""
-    from ..interfaces import Event, EventInput, EventOutput
+    from ...interfaces import Command, CommandRequest, CommandResponse
 
-    event_data = data["event"]
+    command_data = data["command"]
 
     # Reconstruct input/output
-    input_data = event_data.get("input")
-    output_data = event_data.get("output")
+    input_data = command_data.get("input")
+    output_data = command_data.get("output")
 
     input_obj = None
     if input_data:
-        input_obj = EventInput()
+        input_obj = CommandRequest()
         for k, v in input_data.items():
             setattr(input_obj, k, v)
 
     output_obj = None
     if output_data:
-        output_obj = EventOutput()
+        output_obj = CommandResponse()
         for k, v in output_data.items():
             setattr(output_obj, k, v)
 
-    event = Event(
-        name=event_data["name"],
+    command = Command(
+        name=command_data["name"],
         input=input_obj,
         output=output_obj,
-        handled=event_data.get("handled", False),
-        meta=event_data.get("meta", {}),
+        handled=command_data.get("handled", False),
+        meta=command_data.get("meta", {}),
     )
 
     return DeadLetterEntry(
-        event=event,
+        command=command,
         error=Exception(data["error"]),
         timestamp=data["timestamp"],
         attempts=data["attempts"],
@@ -138,23 +138,23 @@ class PersistentDeadLetterQueue:
     """
     Redis-backed persistent dead letter queue.
 
-    Stores failed events in Redis for durability and cross-service access.
+    Stores failed commands in Redis for durability and cross-service access.
     Supports async operations for high-throughput scenarios.
 
     Example:
         dlq = PersistentDeadLetterQueue(config)
         await dlq.connect()
 
-        # Add failed event
-        await dlq.add(event, error, module_name="my_module")
+        # Add failed command
+        await dlq.add(command, error, module_name="my_module")
 
         # Inspect entries
         entries = await dlq.get_entries(limit=10)
         for entry in entries:
-            print(f"Failed: {entry.event.name} - {entry.error}")
+            print(f"Failed: {entry.command.name} - {entry.error}")
 
         # Reprocess
-        success, failed = await dlq.reprocess(host.handle_async)
+        success, failed = await dlq.reprocess(host.dispatch_async)
 
         await dlq.disconnect()
     """
@@ -241,16 +241,16 @@ class PersistentDeadLetterQueue:
 
     async def add(
         self,
-        event: Event[Any, Any],
+        command: Command[Any, Any],
         error: Exception,
         module_name: str = "",
         attempts: int = 1,
     ) -> DeadLetterEntry:
         """
-        Add a failed event to the DLQ.
+        Add a failed command to the DLQ.
 
         Args:
-            event: The event that failed.
+            command: The command that failed.
             error: The exception that caused the failure.
             module_name: Name of the module that was processing.
             attempts: Number of attempts made.
@@ -262,7 +262,7 @@ class PersistentDeadLetterQueue:
             raise RuntimeError("Not connected to Redis")
 
         entry = DeadLetterEntry(
-            event=event,
+            command=command,
             error=error,
             module_name=module_name,
             attempts=attempts,
@@ -287,8 +287,8 @@ class PersistentDeadLetterQueue:
             await pipe.execute()
 
         logger.warning(
-            "Event %s added to persistent DLQ after %d attempts: %s",
-            event.name,
+            "Command %s added to persistent DLQ after %d attempts: %s",
+            command.name,
             attempts,
             error,
         )
@@ -368,7 +368,7 @@ class PersistentDeadLetterQueue:
 
     async def reprocess(
         self,
-        handler: Callable[[Event[Any, Any]], Any],
+        handler: Callable[[Command[Any, Any]], Any],
         max_entries: int | None = None,
         batch_size: int | None = None,
     ) -> tuple[int, int]:
@@ -376,7 +376,7 @@ class PersistentDeadLetterQueue:
         Reprocess entries from the DLQ.
 
         Args:
-            handler: Async function to handle events (e.g., host.handle_async).
+            handler: Async function to handle commands (e.g., host.dispatch_async).
             max_entries: Maximum entries to process (None = all).
             batch_size: Batch size for processing.
 
@@ -402,25 +402,25 @@ class PersistentDeadLetterQueue:
             processed += 1
 
             try:
-                # Reset event state
-                entry.event.handled = False
-                entry.event.output = None
+                # Reset command state
+                entry.command.handled = False
+                entry.command.output = None
 
-                # Handle event (sync or async)
-                result = handler(entry.event)
+                # Handle command (sync or async)
+                result = handler(entry.command)
                 if asyncio.iscoroutine(result):
                     await result
 
-                if entry.event.handled:
+                if entry.command.handled:
                     successful += 1
                     logger.info(
-                        "Successfully reprocessed event %s from DLQ",
-                        entry.event.name,
+                        "Successfully reprocessed command %s from DLQ",
+                        entry.command.name,
                     )
                 else:
                     # No handler found, re-add
                     await self.add(
-                        entry.event,
+                        entry.command,
                         RuntimeError("No handler found on reprocess"),
                         attempts=entry.attempts + 1,
                     )
@@ -429,7 +429,7 @@ class PersistentDeadLetterQueue:
             except Exception as e:
                 # Failed again, re-add
                 await self.add(
-                    entry.event,
+                    entry.command,
                     e,
                     module_name=entry.module_name,
                     attempts=entry.attempts + 1,
@@ -459,14 +459,14 @@ class PersistentDeadLetterQueue:
         recent_entries = await self.get_entries(limit=100)
 
         error_types: dict[str, int] = {}
-        event_names: dict[str, int] = {}
+        command_names: dict[str, int] = {}
         modules: dict[str, int] = {}
 
         for entry in recent_entries:
             error_type = type(entry.error).__name__
             error_types[error_type] = error_types.get(error_type, 0) + 1
 
-            event_names[entry.event.name] = event_names.get(entry.event.name, 0) + 1
+            command_names[entry.command.name] = command_names.get(entry.command.name, 0) + 1
 
             if entry.module_name:
                 modules[entry.module_name] = modules.get(entry.module_name, 0) + 1
@@ -476,7 +476,7 @@ class PersistentDeadLetterQueue:
             "total_added": int(total),
             "max_size": self.config.max_size,
             "error_types": error_types,
-            "event_names": event_names,
+            "command_names": command_names,
             "modules": modules,
         }
 
@@ -504,7 +504,7 @@ class PersistentDeadLetterQueue:
                 break
 
             await self.add(
-                entry.event,
+                entry.command,
                 entry.error,
                 module_name=entry.module_name,
                 attempts=entry.attempts,

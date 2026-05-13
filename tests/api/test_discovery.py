@@ -1,100 +1,100 @@
-"""Tests for EventDiscovery."""
+"""Tests for CommandDiscovery."""
 
 from __future__ import annotations
 
 
-class TestDiscoveredEvent:
-    """Tests for DiscoveredEvent dataclass."""
+class TestDiscoveredCommand:
+    """Tests for DiscoveredCommand dataclass."""
 
-    def test_stores_event_class(self, sample_events) -> None:
-        """DiscoveredEvent should store the event class."""
-        from pymodules.contrib.api import DiscoveredEvent
+    def test_stores_command_class(self, sample_commands) -> None:
+        """DiscoveredCommand should store the command class."""
+        from pymodules.contrib.api import DiscoveredCommand
 
-        discovered = DiscoveredEvent(
-            event_class=sample_events["CreateUser"],
-            input_class=sample_events["CreateUserInput"],
-            output_class=sample_events["CreateUserOutput"],
+        discovered = DiscoveredCommand(
+            command_class=sample_commands["CreateUser"],
+            input_class=sample_commands["CreateUserInput"],
+            output_class=sample_commands["CreateUserOutput"],
         )
 
-        assert discovered.event_class is sample_events["CreateUser"]
+        assert discovered.command_class is sample_commands["CreateUser"]
 
-    def test_stores_input_type(self, sample_events) -> None:
-        """DiscoveredEvent should store the input type."""
-        from pymodules.contrib.api import DiscoveredEvent
+    def test_stores_input_type(self, sample_commands) -> None:
+        """DiscoveredCommand should store the request type."""
+        from pymodules.contrib.api import DiscoveredCommand
 
-        discovered = DiscoveredEvent(
-            event_class=sample_events["CreateUser"],
-            input_class=sample_events["CreateUserInput"],
-            output_class=sample_events["CreateUserOutput"],
+        discovered = DiscoveredCommand(
+            command_class=sample_commands["CreateUser"],
+            input_class=sample_commands["CreateUserInput"],
+            output_class=sample_commands["CreateUserOutput"],
         )
 
-        assert discovered.input_class is sample_events["CreateUserInput"]
+        assert discovered.input_class is sample_commands["CreateUserInput"]
 
-    def test_stores_output_type(self, sample_events) -> None:
-        """DiscoveredEvent should store the output type."""
-        from pymodules.contrib.api import DiscoveredEvent
+    def test_stores_output_type(self, sample_commands) -> None:
+        """DiscoveredCommand should store the response type."""
+        from pymodules.contrib.api import DiscoveredCommand
 
-        discovered = DiscoveredEvent(
-            event_class=sample_events["CreateUser"],
-            input_class=sample_events["CreateUserInput"],
-            output_class=sample_events["CreateUserOutput"],
+        discovered = DiscoveredCommand(
+            command_class=sample_commands["CreateUser"],
+            input_class=sample_commands["CreateUserInput"],
+            output_class=sample_commands["CreateUserOutput"],
         )
 
-        assert discovered.output_class is sample_events["CreateUserOutput"]
+        assert discovered.output_class is sample_commands["CreateUserOutput"]
 
 
-class TestEventDiscovery:
-    """Tests for EventDiscovery class."""
+class TestCommandDiscovery:
+    """Tests for CommandDiscovery class."""
 
-    def test_scan_finds_event_classes(self, tmp_path) -> None:
-        """EventDiscovery should find Event subclasses in packages."""
+    def test_scan_finds_command_classes(self, tmp_path) -> None:
+        """CommandDiscovery should find Command subclasses in packages."""
         import sys
 
-        # Create a temporary package with events
+        # Create a temporary package with commands
         pkg_dir = tmp_path / "test_pkg"
         pkg_dir.mkdir()
         (pkg_dir / "__init__.py").write_text("")
-        (pkg_dir / "events.py").write_text("""
+        (pkg_dir / "commands.py").write_text("""
 from dataclasses import dataclass
-from pymodules import Event, EventInput, EventOutput
+from pymodules import Command, CommandRequest, CommandResponse
 
 @dataclass
-class TestInput(EventInput):
+class TestInput(CommandRequest):
     value: str
 
 @dataclass
-class TestOutput(EventOutput):
+class TestOutput(CommandResponse):
     result: str
 
-class TestEvent(Event[TestInput, TestOutput]):
+class TestCommand(Command[TestInput, TestOutput]):
     pass
 """)
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.contrib.api import EventDiscovery
+            from pymodules.contrib.api import CommandDiscovery
 
-            discovery = EventDiscovery()
-            events = discovery.discover("test_pkg")
+            discovery = CommandDiscovery()
+            commands = discovery.discover("test_pkg")
 
-            assert len(events) >= 1
-            event_names = [e.event_class.__name__ for e in events]
-            assert "TestEvent" in event_names
+            assert len(commands) >= 1
+            names = [c.command_class.__name__ for c in commands]
+            assert "TestCommand" in names
         finally:
             sys.path.remove(str(tmp_path))
 
-    def test_scan_ignores_non_events(self, tmp_path) -> None:
-        """EventDiscovery should ignore non-Event classes."""
+    def test_scan_ignores_non_commands(self, tmp_path) -> None:
+        """CommandDiscovery should ignore non-Command classes."""
         import sys
 
         pkg_dir = tmp_path / "test_pkg2"
         pkg_dir.mkdir()
         (pkg_dir / "__init__.py").write_text("")
-        (pkg_dir / "events.py").write_text("""
+        (pkg_dir / "commands.py").write_text("""
 from dataclasses import dataclass
-from pymodules import Event, EventInput, EventOutput
+from pymodules import Command, CommandRequest, CommandResponse
 
-class NotAnEvent:
+class NotACommand:
     pass
 
 @dataclass
@@ -102,33 +102,33 @@ class JustADataclass:
     value: str
 
 @dataclass
-class RealInput(EventInput):
+class RealInput(CommandRequest):
     x: int
 
 @dataclass
-class RealOutput(EventOutput):
+class RealOutput(CommandResponse):
     y: int
 
-class RealEvent(Event[RealInput, RealOutput]):
+class RealCommand(Command[RealInput, RealOutput]):
     pass
 """)
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.contrib.api import EventDiscovery
+            from pymodules.contrib.api import CommandDiscovery
 
-            discovery = EventDiscovery()
-            events = discovery.discover("test_pkg2")
+            discovery = CommandDiscovery()
+            commands = discovery.discover("test_pkg2")
 
-            event_names = [e.event_class.__name__ for e in events]
-            assert "NotAnEvent" not in event_names
-            assert "JustADataclass" not in event_names
-            assert "RealEvent" in event_names
+            names = [c.command_class.__name__ for c in commands]
+            assert "NotACommand" not in names
+            assert "JustADataclass" not in names
+            assert "RealCommand" in names
         finally:
             sys.path.remove(str(tmp_path))
 
     def test_scan_recursive(self, tmp_path) -> None:
-        """EventDiscovery should scan subpackages recursively."""
+        """CommandDiscovery should scan subpackages recursively."""
         import sys
 
         # Create nested package structure
@@ -139,140 +139,140 @@ class RealEvent(Event[RealInput, RealOutput]):
         sub_dir = pkg_dir / "submodule"
         sub_dir.mkdir()
         (sub_dir / "__init__.py").write_text("")
-        (sub_dir / "events.py").write_text("""
+        (sub_dir / "commands.py").write_text("""
 from dataclasses import dataclass
-from pymodules import Event, EventInput, EventOutput
+from pymodules import Command, CommandRequest, CommandResponse
 
 @dataclass
-class NestedInput(EventInput):
+class NestedInput(CommandRequest):
     value: str
 
 @dataclass
-class NestedOutput(EventOutput):
+class NestedOutput(CommandResponse):
     result: str
 
-class NestedEvent(Event[NestedInput, NestedOutput]):
+class NestedCommand(Command[NestedInput, NestedOutput]):
     pass
 """)
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.contrib.api import EventDiscovery
+            from pymodules.contrib.api import CommandDiscovery
 
-            discovery = EventDiscovery()
-            events = discovery.discover("test_pkg3")
+            discovery = CommandDiscovery()
+            commands = discovery.discover("test_pkg3")
 
-            event_names = [e.event_class.__name__ for e in events]
-            assert "NestedEvent" in event_names
+            names = [c.command_class.__name__ for c in commands]
+            assert "NestedCommand" in names
         finally:
             sys.path.remove(str(tmp_path))
 
     def test_scan_respects_exclude_patterns(self, tmp_path) -> None:
-        """EventDiscovery should respect exclude patterns."""
+        """CommandDiscovery should respect exclude patterns."""
         import sys
 
         pkg_dir = tmp_path / "test_pkg4"
         pkg_dir.mkdir()
         (pkg_dir / "__init__.py").write_text("")
-        (pkg_dir / "events.py").write_text("""
+        (pkg_dir / "commands.py").write_text("""
 from dataclasses import dataclass
-from pymodules import Event, EventInput, EventOutput
+from pymodules import Command, CommandRequest, CommandResponse
 
 @dataclass
-class IncludedInput(EventInput):
+class IncludedInput(CommandRequest):
     value: str
 
 @dataclass
-class IncludedOutput(EventOutput):
+class IncludedOutput(CommandResponse):
     result: str
 
-class IncludedEvent(Event[IncludedInput, IncludedOutput]):
+class IncludedCommand(Command[IncludedInput, IncludedOutput]):
     pass
 """)
-        (pkg_dir / "internal_events.py").write_text("""
+        (pkg_dir / "internal_commands.py").write_text("""
 from dataclasses import dataclass
-from pymodules import Event, EventInput, EventOutput
+from pymodules import Command, CommandRequest, CommandResponse
 
 @dataclass
-class ExcludedInput(EventInput):
+class ExcludedInput(CommandRequest):
     value: str
 
 @dataclass
-class ExcludedOutput(EventOutput):
+class ExcludedOutput(CommandResponse):
     result: str
 
-class ExcludedEvent(Event[ExcludedInput, ExcludedOutput]):
+class ExcludedCommand(Command[ExcludedInput, ExcludedOutput]):
     pass
 """)
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.contrib.api import EventDiscovery
+            from pymodules.contrib.api import CommandDiscovery
 
-            discovery = EventDiscovery(exclude_patterns=["internal_*"])
-            events = discovery.discover("test_pkg4")
+            discovery = CommandDiscovery(exclude_patterns=["internal_*"])
+            commands = discovery.discover("test_pkg4")
 
-            event_names = [e.event_class.__name__ for e in events]
-            assert "IncludedEvent" in event_names
-            assert "ExcludedEvent" not in event_names
+            names = [c.command_class.__name__ for c in commands]
+            assert "IncludedCommand" in names
+            assert "ExcludedCommand" not in names
         finally:
             sys.path.remove(str(tmp_path))
 
-    def test_extracts_input_output_types(self, sample_events) -> None:
-        """EventDiscovery should extract input/output types from generics."""
-        from pymodules.contrib.api import EventDiscovery
+    def test_extracts_input_output_types(self, sample_commands) -> None:
+        """CommandDiscovery should extract request/response types from generics."""
+        from pymodules.contrib.api import CommandDiscovery
 
-        discovery = EventDiscovery()
-        input_cls, output_cls = discovery._extract_type_params(sample_events["CreateUser"])
+        discovery = CommandDiscovery()
+        input_cls, output_cls = discovery._extract_type_params(sample_commands["CreateUser"])
 
-        assert input_cls is sample_events["CreateUserInput"]
-        assert output_cls is sample_events["CreateUserOutput"]
+        assert input_cls is sample_commands["CreateUserInput"]
+        assert output_cls is sample_commands["CreateUserOutput"]
 
     def test_respects_exclude_decorator(self, tmp_path) -> None:
-        """EventDiscovery should respect @exclude_from_api decorator."""
+        """CommandDiscovery should respect @exclude_from_api decorator."""
         import sys
 
         pkg_dir = tmp_path / "test_pkg5"
         pkg_dir.mkdir()
         (pkg_dir / "__init__.py").write_text("")
-        (pkg_dir / "events.py").write_text("""
+        (pkg_dir / "commands.py").write_text("""
 from dataclasses import dataclass
-from pymodules import Event, EventInput, EventOutput
+from pymodules import Command, CommandRequest, CommandResponse
 from pymodules.contrib.api import exclude_from_api
 
 @dataclass
-class PublicInput(EventInput):
+class PublicInput(CommandRequest):
     value: str
 
 @dataclass
-class PublicOutput(EventOutput):
+class PublicOutput(CommandResponse):
     result: str
 
-class PublicEvent(Event[PublicInput, PublicOutput]):
+class PublicCommand(Command[PublicInput, PublicOutput]):
     pass
 
 @dataclass
-class PrivateInput(EventInput):
+class PrivateInput(CommandRequest):
     value: str
 
 @dataclass
-class PrivateOutput(EventOutput):
+class PrivateOutput(CommandResponse):
     result: str
 
 @exclude_from_api
-class PrivateEvent(Event[PrivateInput, PrivateOutput]):
+class PrivateCommand(Command[PrivateInput, PrivateOutput]):
     pass
 """)
 
         sys.path.insert(0, str(tmp_path))
         try:
-            from pymodules.contrib.api import EventDiscovery
+            from pymodules.contrib.api import CommandDiscovery
 
-            discovery = EventDiscovery()
-            events = discovery.discover("test_pkg5")
+            discovery = CommandDiscovery()
+            commands = discovery.discover("test_pkg5")
 
-            event_names = [e.event_class.__name__ for e in events]
-            assert "PublicEvent" in event_names
-            assert "PrivateEvent" not in event_names
+            names = [c.command_class.__name__ for c in commands]
+            assert "PublicCommand" in names
+            assert "PrivateCommand" not in names
         finally:
             sys.path.remove(str(tmp_path))

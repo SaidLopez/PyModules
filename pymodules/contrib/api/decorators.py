@@ -1,6 +1,6 @@
 """API endpoint decorators for customizing route generation.
 
-These decorators allow Event classes to override the default convention-based
+These decorators allow Command classes to override the default convention-based
 routing with custom paths, methods, tags, and permissions.
 """
 
@@ -10,7 +10,7 @@ from typing import Any
 
 from .conventions import HTTPMethod
 
-# Attribute names used to store decorator metadata on Event classes
+# Attribute names used to store decorator metadata on Command classes
 _API_METADATA_ATTR = "_api_endpoint_metadata"
 _API_EXCLUDED_ATTR = "_api_excluded"
 
@@ -28,7 +28,7 @@ def api_endpoint(
     public: bool = False,
     response_model_exclude_none: bool = True,
 ) -> Any:
-    """Decorator to customize API endpoint generation for an Event class.
+    """Decorator to customize API endpoint generation for a Command class.
 
     Use this decorator when the convention-based routing doesn't fit your needs.
 
@@ -51,7 +51,7 @@ def api_endpoint(
             tags=["Users", "Advanced"],
             required_permissions=["users:write"],
         )
-        class MergeUsersEvent(Event[MergeUsersInput, MergeUsersOutput]):
+        class MergeUsersCommand(Command[MergeUsersRequest, MergeUsersResponse]):
             name = "user.merge"
     """
 
@@ -81,13 +81,13 @@ def api_endpoint(
 
 
 def exclude_from_api(cls: type) -> type:
-    """Decorator to exclude an Event class from API generation.
+    """Decorator to exclude a Command class from API generation.
 
-    Use this for internal events that should not be exposed via the REST API.
+    Use this for internal commands that should not be exposed via the REST API.
 
     Example:
         @exclude_from_api
-        class UserIndexUpdateEvent(Event[IndexUpdateInput, IndexUpdateOutput]):
+        class UserIndexUpdateCommand(Command[IndexUpdateRequest, IndexUpdateResponse]):
             name = "user.index_update"
     """
     setattr(cls, _API_EXCLUDED_ATTR, True)
@@ -95,10 +95,10 @@ def exclude_from_api(cls: type) -> type:
 
 
 def get_api_metadata(cls: type) -> dict[str, Any]:
-    """Get API metadata from an Event class if decorated.
+    """Get API metadata from a Command class if decorated.
 
     Args:
-        cls: Event class to check
+        cls: Command class to check
 
     Returns:
         Dictionary of API metadata or empty dict if not decorated
@@ -107,10 +107,10 @@ def get_api_metadata(cls: type) -> dict[str, Any]:
 
 
 def is_excluded_from_api(cls: type) -> bool:
-    """Check if an Event class is excluded from API generation.
+    """Check if a Command class is excluded from API generation.
 
     Args:
-        cls: Event class to check
+        cls: Command class to check
 
     Returns:
         True if the class should be excluded from API

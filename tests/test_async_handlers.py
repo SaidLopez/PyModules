@@ -8,9 +8,9 @@ from dataclasses import dataclass
 import pytest
 
 from pymodules import (
-    Event,
-    EventInput,
-    EventOutput,
+    Command,
+    CommandRequest,
+    CommandResponse,
     Module,
     ModuleHost,
     ModuleHostConfig,
@@ -19,17 +19,17 @@ from pymodules import (
 
 
 @dataclass
-class AsyncInput(EventInput):
+class AsyncInput(CommandRequest):
     value: str = ""
     delay: float = 0.0
 
 
 @dataclass
-class AsyncOutput(EventOutput):
+class AsyncOutput(CommandResponse):
     result: str = ""
 
 
-class AsyncEvent(Event[AsyncInput, AsyncOutput]):
+class AsyncCommand(Command[AsyncInput, AsyncOutput]):
     name = "test.async"
 
 
@@ -41,17 +41,17 @@ class AsyncModule(Module):
         super().__init__()
         self.call_count = 0
 
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, AsyncEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, AsyncCommand)
 
-    async def handle(self, event: Event) -> None:
-        """Async handler that processes events."""
-        if isinstance(event, AsyncEvent):
+    async def handle(self, command: Command) -> None:
+        """Async handler that processes commands."""
+        if isinstance(command, AsyncCommand):
             self.call_count += 1
-            if event.input.delay > 0:
-                await asyncio.sleep(event.input.delay)
-            event.output = AsyncOutput(result=f"async: {event.input.value}")
-            event.handled = True
+            if command.input.delay > 0:
+                await asyncio.sleep(command.input.delay)
+            command.output = AsyncOutput(result=f"async: {command.input.value}")
+            command.handled = True
 
 
 @module(name="SyncModule")
@@ -62,57 +62,59 @@ class SyncModule(Module):
         super().__init__()
         self.call_count = 0
 
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, AsyncEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, AsyncCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, AsyncEvent):
+    def handle(self, command: Command) -> None:
+        if isinstance(command, AsyncCommand):
             self.call_count += 1
-            event.output = AsyncOutput(result=f"sync: {event.input.value}")
-            event.handled = True
+            command.output = AsyncOutput(result=f"sync: {command.input.value}")
+            command.handled = True
 
 
 class TestAsyncHandlers:
     """Tests for native async handler support."""
 
     @pytest.mark.asyncio
-    async def test_async_handler_via_handle_async(self):
-        """Async handlers work with handle_async."""
+    async def test_async_handler_via_dispatch_async(self):
+        """Async handlers work with dispatch_async."""
         host = ModuleHost()
         mod = AsyncModule()
         host.register(mod)
 
-        event = AsyncEvent(input=AsyncInput(value="test"))
-        result = await host.handle_async(event)
+        command = AsyncCommand(input=AsyncInput(value="test"))
+        result = await host.dispatch_async(command)
 
         assert result.handled
         assert result.output.result == "async: test"
         assert mod.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_sync_handler_via_handle_async(self):
-        """Sync handlers work with handle_async."""
+    async def test_sync_handler_via_dispatch_async(self):
+        """Sync handlers work with dispatch_async."""
         host = ModuleHost()
         mod = SyncModule()
         host.register(mod)
 
-        event = AsyncEvent(input=AsyncInput(value="test"))
-        result = await host.handle_async(event)
+        command = AsyncCommand(input=AsyncInput(value="test"))
+        result = await host.dispatch_async(command)
 
         assert result.handled
         assert result.output.result == "sync: test"
 
     @pytest.mark.asyncio
-    async def test_concurrent_async_events(self):
-        """Multiple async events can run concurrently."""
+    async def test_concurrent_async_commands(self):
+        """Multiple async commands can run concurrently."""
         host = ModuleHost()
         host.register(AsyncModule())
 
-        # Create multiple events with delays
-        events = [AsyncEvent(input=AsyncInput(value=f"event{i}", delay=0.01)) for i in range(5)]
+        # Create multiple commands with delays
+        commands = [
+            AsyncCommand(input=AsyncInput(value=f"command{i}", delay=0.01)) for i in range(5)
+        ]
 
         # Dispatch concurrently
-        results = await asyncio.gather(*[host.handle_async(e) for e in events])
+        results = await asyncio.gather(*[host.dispatch_async(c) for c in commands])
 
         assert all(r.handled for r in results)
 
@@ -123,40 +125,40 @@ class TestAsyncHandlers:
         host = ModuleHost(config=config)
         host.register(AsyncModule())
 
-        event = AsyncEvent(input=AsyncInput(value="test"))
-        await host.handle_async(event)
+        command = AsyncCommand(input=AsyncInput(value="test"))
+        await host.dispatch_async(command)
 
         assert host.metrics.events_dispatched == 1
         assert host.metrics.events_handled == 1
 
     @pytest.mark.asyncio
     async def test_async_with_callbacks(self):
-        """Async handlers work with event callbacks."""
-        started_events = []
-        ended_events = []
+        """Async handlers work with lifecycle callbacks."""
+        started = []
+        ended = []
 
         config = ModuleHostConfig(
-            on_event_start=lambda e: started_events.append(e),
-            on_event_end=lambda e, h: ended_events.append((e, h)),
+            on_event_start=lambda c: started.append(c),
+            on_event_end=lambda c, h: ended.append((c, h)),
         )
         host = ModuleHost(config=config)
         host.register(AsyncModule())
 
-        event = AsyncEvent(input=AsyncInput(value="test"))
-        await host.handle_async(event)
+        command = AsyncCommand(input=AsyncInput(value="test"))
+        await host.dispatch_async(command)
 
-        assert len(started_events) == 1
-        assert len(ended_events) == 1
-        assert ended_events[0][1] is True  # handled
+        assert len(started) == 1
+        assert len(ended) == 1
+        assert ended[0][1] is True  # handled
 
-    def test_async_handler_via_sync_handle(self):
-        """Async handlers work with sync handle() too."""
+    def test_async_handler_via_sync_dispatch(self):
+        """Async handlers work with sync dispatch() too."""
         host = ModuleHost()
         mod = AsyncModule()
         host.register(mod)
 
-        event = AsyncEvent(input=AsyncInput(value="test"))
-        result = host.handle(event)
+        command = AsyncCommand(input=AsyncInput(value="test"))
+        result = host.dispatch(command)
 
         assert result.handled
         assert result.output.result == "async: test"
@@ -175,14 +177,14 @@ class TestAsyncWithResilience:
         host.register(AsyncModule())
 
         # First should succeed
-        event1 = AsyncEvent(input=AsyncInput(value="test1"))
-        await host.handle_async(event1)
-        assert event1.handled
+        command1 = AsyncCommand(input=AsyncInput(value="test1"))
+        await host.dispatch_async(command1)
+        assert command1.handled
 
         # Second should fail
-        event2 = AsyncEvent(input=AsyncInput(value="test2"))
+        command2 = AsyncCommand(input=AsyncInput(value="test2"))
         with pytest.raises(RateLimitExceeded):
-            await host.handle_async(event2)
+            await host.dispatch_async(command2)
 
     @pytest.mark.asyncio
     async def test_async_with_circuit_breaker(self):
@@ -197,22 +199,22 @@ class TestAsyncWithResilience:
 
         @module(name="FailingAsync")
         class FailingAsyncModule(Module):
-            def can_handle(self, event: Event) -> bool:
-                return isinstance(event, AsyncEvent)
+            def can_handle(self, command: Command) -> bool:
+                return isinstance(command, AsyncCommand)
 
-            async def handle(self, event: Event) -> None:
+            async def handle(self, command: Command) -> None:
                 raise ValueError("Async failure")
 
         host.register(FailingAsyncModule())
 
         # Cause failure
-        event1 = AsyncEvent(input=AsyncInput(value="test1"))
-        await host.handle_async(event1)
+        command1 = AsyncCommand(input=AsyncInput(value="test1"))
+        await host.dispatch_async(command1)
 
         # Circuit should be open
-        event2 = AsyncEvent(input=AsyncInput(value="test2"))
+        command2 = AsyncCommand(input=AsyncInput(value="test2"))
         with pytest.raises(CircuitBreakerOpen):
-            await host.handle_async(event2)
+            await host.dispatch_async(command2)
 
     @pytest.mark.asyncio
     async def test_async_with_retry(self):
@@ -230,80 +232,80 @@ class TestAsyncWithResilience:
 
         @module(name="FlakyAsync")
         class FlakyAsyncModule(Module):
-            def can_handle(self, event: Event) -> bool:
-                return isinstance(event, AsyncEvent)
+            def can_handle(self, command: Command) -> bool:
+                return isinstance(command, AsyncCommand)
 
-            async def handle(self, event: Event) -> None:
+            async def handle(self, command: Command) -> None:
                 nonlocal call_count
                 call_count += 1
                 if call_count < 3:
                     raise ValueError("Temporary async failure")
-                event.output = AsyncOutput(result="success")
-                event.handled = True
+                command.output = AsyncOutput(result="success")
+                command.handled = True
 
         host.register(FlakyAsyncModule())
 
-        event = AsyncEvent(input=AsyncInput(value="test"))
-        await host.handle_async(event)
+        command = AsyncCommand(input=AsyncInput(value="test"))
+        await host.dispatch_async(command)
 
-        assert event.handled
+        assert command.handled
         assert call_count == 3
         assert host.metrics.events_retried == 2
 
 
 class TestAsyncLoopReuse:
-    """Tests for event loop management in async handlers."""
+    """Tests for asyncio loop management in async handlers."""
 
     @pytest.mark.asyncio
-    async def test_async_handle_reuses_event_loop(self):
-        """Verify handle_async reuses the same event loop for async handlers."""
+    async def test_async_dispatch_reuses_asyncio_loop(self):
+        """Verify dispatch_async reuses the same asyncio loop for async handlers."""
         loop_ids = []
 
         @module(name="LoopTracker")
         class LoopTrackerModule(Module):
-            def can_handle(self, event):
-                return event.name == "track"
+            def can_handle(self, command):
+                return command.name == "track"
 
-            async def handle(self, event):
+            async def handle(self, command):
                 loop_ids.append(id(asyncio.get_running_loop()))
-                event.handled = True
+                command.handled = True
 
         host = ModuleHost()
         host.register(LoopTrackerModule())
 
-        event1 = Event(name="track", input=EventInput())
-        event2 = Event(name="track", input=EventInput())
+        command1 = Command(name="track", input=CommandRequest())
+        command2 = Command(name="track", input=CommandRequest())
 
-        await host.handle_async(event1)
-        await host.handle_async(event2)
+        await host.dispatch_async(command1)
+        await host.dispatch_async(command2)
 
         assert len(loop_ids) == 2, "Should have tracked two loop IDs"
         assert len(set(loop_ids)) == 1, "Should reuse the same event loop"
 
-    def test_sync_handle_with_async_handler_uses_asyncio_run(self):
-        """Verify sync handle uses asyncio.run for async handlers (no nested loops)."""
+    def test_sync_dispatch_with_async_handler_uses_asyncio_run(self):
+        """Verify sync dispatch uses asyncio.run for async handlers (no nested loops)."""
         call_count = 0
 
         @module(name="AsyncCounter")
         class AsyncCounterModule(Module):
-            def can_handle(self, event):
-                return event.name == "count"
+            def can_handle(self, command):
+                return command.name == "count"
 
-            async def handle(self, event):
+            async def handle(self, command):
                 nonlocal call_count
                 call_count += 1
-                event.handled = True
+                command.handled = True
 
         host = ModuleHost()
         host.register(AsyncCounterModule())
 
         # Multiple sync calls with async handlers should work without issues
-        event1 = Event(name="count", input=EventInput())
-        event2 = Event(name="count", input=EventInput())
+        command1 = Command(name="count", input=CommandRequest())
+        command2 = Command(name="count", input=CommandRequest())
 
-        host.handle(event1)
-        host.handle(event2)
+        host.dispatch(command1)
+        host.dispatch(command2)
 
-        assert call_count == 2, "Both events should be handled"
-        assert event1.handled
-        assert event2.handled
+        assert call_count == 2, "Both commands should be handled"
+        assert command1.handled
+        assert command2.handled

@@ -1,8 +1,8 @@
 """REST API generation layer for PyModules.
 
 This module provides API utilities including:
-- ModuleRouter: Auto-discovery router for Event classes
-- EventDiscovery: Scans packages for Event classes
+- ModuleRouter: Auto-discovery router for Command classes
+- CommandDiscovery: Scans packages for Command classes
 - RouteConvention: Convention-based REST path generation
 - Decorators: @api_endpoint, @exclude_from_api
 - Errors: APIError hierarchy and error handlers
@@ -19,7 +19,7 @@ Example:
     register_error_handlers(app)
 
     router = ModuleRouter(host)
-    router.discover_events("myapp.events")
+    router.discover_commands("myapp.commands")
     router.mount(app)
 """
 
@@ -35,7 +35,7 @@ require_optional_dependency("fastapi", "pymodules.contrib.api", "api")
 if TYPE_CHECKING:
     from .conventions import HTTPMethod, RESTConvention, RouteConvention, RouteInfo
     from .decorators import api_endpoint, exclude_from_api, get_api_metadata, is_excluded_from_api
-    from .discovery import DiscoveredEvent, EventDiscovery
+    from .discovery import CommandDiscovery, DiscoveredCommand
     from .errors import (
         APIError,
         AuthenticationError,
@@ -51,8 +51,8 @@ __all__ = [
     # Router
     "ModuleRouter",
     # Discovery
-    "DiscoveredEvent",
-    "EventDiscovery",
+    "DiscoveredCommand",
+    "CommandDiscovery",
     # Conventions
     "HTTPMethod",
     "RouteConvention",
@@ -80,7 +80,7 @@ def __getattr__(name: str):
         from .router import ModuleRouter
 
         return ModuleRouter
-    elif name in ("DiscoveredEvent", "EventDiscovery"):
+    elif name in ("DiscoveredCommand", "CommandDiscovery"):
         from . import discovery
 
         return getattr(discovery, name)

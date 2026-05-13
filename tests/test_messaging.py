@@ -7,7 +7,14 @@ from dataclasses import dataclass
 
 import pytest
 
-from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
+from pymodules import (
+    Command,
+    CommandRequest,
+    CommandResponse,
+    Module,
+    ModuleHost,
+    module,
+)
 from pymodules.contrib.messaging.broker import (
     Message,
     MessageBroker,
@@ -26,33 +33,33 @@ from pymodules.contrib.messaging.consumer import (
 
 
 @dataclass
-class MsgTestInput(EventInput):
+class MsgTestInput(CommandRequest):
     value: str = ""
 
 
 @dataclass
-class MsgTestOutput(EventOutput):
+class MsgTestOutput(CommandResponse):
     result: str = ""
 
 
-class MsgTestEvent(Event[MsgTestInput, MsgTestOutput]):
+class MsgTestCommand(Command[MsgTestInput, MsgTestOutput]):
     name = "test.messaging"
 
 
 @module(name="ConsumerModule")
 class ConsumerModule(Module):
-    """Module that handles external events for testing."""
+    """Module that handles ExternalEvent commands (broker-sourced) for testing."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.handled_events: list[Event] = []
+        self.handled_commands: list[Command] = []
 
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, ExternalEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, ExternalEvent)
 
-    def handle(self, event: Event) -> None:
-        self.handled_events.append(event)
-        event.handled = True
+    def handle(self, command: Command) -> None:
+        self.handled_commands.append(command)
+        command.handled = True
 
 
 class MockBroker(MessageBroker):
@@ -305,7 +312,7 @@ class TestMockBroker:
 
 
 class TestEventConsumer:
-    """Tests for EventConsumer."""
+    """Tests for EventConsumer (broker-to-host bridge)."""
 
     @pytest.mark.asyncio
     async def test_consumer_creation(self) -> None:
@@ -324,8 +331,8 @@ class TestEventConsumer:
         assert not consumer.running
 
     @pytest.mark.asyncio
-    async def test_consumer_handles_messages(self) -> None:
-        """Consumer dispatches messages to host."""
+    async def test_consumer_dispatches_messages(self) -> None:
+        """Consumer dispatches broker messages as commands to host."""
         broker = MockBroker()
         host = ModuleHost()
         handler = ConsumerModule()
@@ -354,8 +361,8 @@ class TestEventConsumer:
         count = await consumer.process_once(timeout=1.0)
 
         assert count == 1
-        assert len(handler.handled_events) == 1
-        assert handler.handled_events[0].name == "user.created"
+        assert len(handler.handled_commands) == 1
+        assert handler.handled_commands[0].name == "user.created"
 
     @pytest.mark.asyncio
     async def test_consumer_auto_acks(self) -> None:
@@ -417,8 +424,8 @@ class TestEventConsumer:
 
         await consumer.process_once(timeout=1.0)
 
-        assert len(handler.handled_events) == 1
-        assert handler.handled_events[0].name == "order.created"
+        assert len(handler.handled_commands) == 1
+        assert handler.handled_commands[0].name == "order.created"
 
 
 # =============================================================================
@@ -445,13 +452,13 @@ class TestExternalEvent:
 
     def test_external_event_creation(self) -> None:
         """ExternalEvent can be created with input."""
-        event = ExternalEvent(
+        cmd = ExternalEvent(
             name="user.created",
             input=ExternalEventInput(data={"user": "test"}),
         )
 
-        assert event.name == "user.created"
-        assert event.input.data == {"user": "test"}
+        assert cmd.name == "user.created"
+        assert cmd.input.data == {"user": "test"}
 
 
 # =============================================================================
@@ -493,9 +500,9 @@ class TestMessagingIntegration:
             await consumer.process_once(timeout=2.0)
 
         # Verify all handled
-        assert len(handler.handled_events) == 3
-        for event in handler.handled_events:
-            assert event.name == "notification.sent"
+        assert len(handler.handled_commands) == 3
+        for cmd in handler.handled_commands:
+            assert cmd.name == "notification.sent"
 
     @pytest.mark.asyncio
     async def test_trace_context_propagation(self) -> None:
@@ -529,8 +536,8 @@ class TestMessagingIntegration:
 
         await consumer.process_once(timeout=1.0)
 
-        # Verify trace context in event meta
-        event = handler.handled_events[0]
-        assert event.meta.get("trace_id") == "trace-123"
-        assert event.meta.get("span_id") == "span-456"
-        assert event.meta.get("correlation_id") == "corr-789"
+        # Verify trace context in command meta
+        cmd = handler.handled_commands[0]
+        assert cmd.meta.get("trace_id") == "trace-123"
+        assert cmd.meta.get("span_id") == "span-456"
+        assert cmd.meta.get("correlation_id") == "corr-789"

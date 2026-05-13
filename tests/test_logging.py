@@ -6,33 +6,41 @@ import logging
 from dataclasses import dataclass
 from io import StringIO
 
-from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, ModuleHostConfig, module
+from pymodules import (
+    Command,
+    CommandRequest,
+    CommandResponse,
+    Module,
+    ModuleHost,
+    ModuleHostConfig,
+    module,
+)
 from pymodules.logging import configure_logging, get_logger
 
 
 @dataclass
-class LogInput(EventInput):
+class LogInput(CommandRequest):
     value: str = ""
 
 
 @dataclass
-class LogOutput(EventOutput):
+class LogOutput(CommandResponse):
     result: str = ""
 
 
-class LogEvent(Event[LogInput, LogOutput]):
+class LogCommand(Command[LogInput, LogOutput]):
     name = "test.log"
 
 
 @module(name="LogTestModule")
 class LogTestModule(Module):
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, LogEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, LogCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, LogEvent):
-            event.output = LogOutput(result=f"logged: {event.input.value}")
-            event.handled = True
+    def handle(self, command: Command) -> None:
+        if isinstance(command, LogCommand):
+            command.output = LogOutput(result=f"logged: {command.input.value}")
+            command.handled = True
 
 
 class TestConfigureLogging:
@@ -116,17 +124,17 @@ class TestHostLogging:
         assert any("Unregistered module" in record.message for record in caplog.records)
 
     def test_host_logs_dispatch_at_debug(self, caplog):
-        """Test that event dispatch is logged at debug level."""
+        """Test that command dispatch is logged at debug level."""
         config = ModuleHostConfig(log_level=logging.DEBUG)
 
         with caplog.at_level(logging.DEBUG, logger="pymodules"):
             host = ModuleHost(config=config)
             host.register(LogTestModule())
 
-            event = LogEvent(input=LogInput(value="test"))
-            host.handle(event)
+            command = LogCommand(input=LogInput(value="test"))
+            host.dispatch(command)
 
-        assert any("Dispatching event" in record.message for record in caplog.records)
+        assert any("Dispatching command" in record.message for record in caplog.records)
 
     def test_host_logs_shutdown(self, caplog):
         """Test that shutdown is logged."""

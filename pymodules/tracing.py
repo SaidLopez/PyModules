@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .interfaces import Event
+    from .interfaces import Command
 
 from .logging import get_logger
 
@@ -378,28 +378,28 @@ class OpenTelemetryExporter:
 
 
 # =============================================================================
-# Event Tracing Utilities
+# Command Tracing Utilities
 # =============================================================================
 
 
-def inject_trace_context(event: "Event") -> None:
-    """Inject current trace context into event metadata."""
+def inject_trace_context(command: "Command") -> None:
+    """Inject current trace context into command metadata."""
     ctx = get_current_trace()
     if ctx:
-        event.meta["trace_id"] = ctx.trace_id
-        event.meta["correlation_id"] = ctx.correlation_id
+        command.meta["trace_id"] = ctx.trace_id
+        command.meta["correlation_id"] = ctx.correlation_id
         if ctx.current_span:
-            event.meta["parent_span_id"] = ctx.current_span.span_id
+            command.meta["parent_span_id"] = ctx.current_span.span_id
     else:
         # No active trace, but still inject a correlation ID for request tracking
-        if "correlation_id" not in event.meta:
-            event.meta["correlation_id"] = generate_id()
+        if "correlation_id" not in command.meta:
+            command.meta["correlation_id"] = generate_id()
 
 
-def extract_trace_context(event: "Event") -> tuple[str | None, str | None, str | None]:
-    """Extract trace context from event metadata."""
+def extract_trace_context(command: "Command") -> tuple[str | None, str | None, str | None]:
+    """Extract trace context from command metadata."""
     return (
-        event.meta.get("trace_id"),
-        event.meta.get("correlation_id"),
-        event.meta.get("parent_span_id"),
+        command.meta.get("trace_id"),
+        command.meta.get("correlation_id"),
+        command.meta.get("parent_span_id"),
     )

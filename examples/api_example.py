@@ -20,7 +20,14 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
+from pymodules import (
+    Command,
+    CommandRequest,
+    CommandResponse,
+    Module,
+    ModuleHost,
+    module,
+)
 from pymodules.contrib.api import (
     ModuleRouter,
     api_endpoint,
@@ -28,15 +35,14 @@ from pymodules.contrib.api import (
     register_error_handlers,
 )
 
-
 # =============================================================================
-# Event Definitions
+# Command Definitions
 # =============================================================================
 
 
 @dataclass
-class CreateProductInput(EventInput):
-    """Input for creating a product."""
+class CreateProductInput(CommandRequest):
+    """Request payload for creating a product."""
 
     name: str
     price: float
@@ -44,8 +50,8 @@ class CreateProductInput(EventInput):
 
 
 @dataclass
-class CreateProductOutput(EventOutput):
-    """Output after creating a product."""
+class CreateProductOutput(CommandResponse):
+    """Response after creating a product."""
 
     id: str
     name: str
@@ -53,15 +59,15 @@ class CreateProductOutput(EventOutput):
 
 
 @dataclass
-class GetProductInput(EventInput):
-    """Input for getting a product."""
+class GetProductInput(CommandRequest):
+    """Request payload for getting a product."""
 
     product_id: str
 
 
 @dataclass
-class GetProductOutput(EventOutput):
-    """Output for a single product."""
+class GetProductOutput(CommandResponse):
+    """Response for a single product."""
 
     id: str
     name: str
@@ -70,24 +76,24 @@ class GetProductOutput(EventOutput):
 
 
 @dataclass
-class ListProductsInput(EventInput):
-    """Input for listing products."""
+class ListProductsInput(CommandRequest):
+    """Request payload for listing products."""
 
     limit: int = 10
     offset: int = 0
 
 
 @dataclass
-class ListProductsOutput(EventOutput):
-    """Output for product listing."""
+class ListProductsOutput(CommandResponse):
+    """Response for product listing."""
 
     products: list[dict[str, Any]]
     total: int
 
 
 @dataclass
-class SearchProductsInput(EventInput):
-    """Input for searching products."""
+class SearchProductsInput(CommandRequest):
+    """Request payload for searching products."""
 
     query: str
     min_price: float | None = None
@@ -95,20 +101,20 @@ class SearchProductsInput(EventInput):
 
 
 @dataclass
-class SearchProductsOutput(EventOutput):
-    """Output for product search."""
+class SearchProductsOutput(CommandResponse):
+    """Response for product search."""
 
     products: list[dict[str, Any]]
     total: int
 
 
 # =============================================================================
-# Event Classes
+# Command Classes
 # =============================================================================
 
 
-class CreateProduct(Event[CreateProductInput, CreateProductOutput]):
-    """Event to create a new product.
+class CreateProduct(Command[CreateProductInput, CreateProductOutput]):
+    """Command to create a new product.
 
     Convention: 'create' + 'Product' -> POST /products
     """
@@ -116,8 +122,8 @@ class CreateProduct(Event[CreateProductInput, CreateProductOutput]):
     pass
 
 
-class GetProduct(Event[GetProductInput, GetProductOutput]):
-    """Event to get a product by ID.
+class GetProduct(Command[GetProductInput, GetProductOutput]):
+    """Command to get a product by ID.
 
     Convention: 'get' + 'Product' -> GET /products/{id}
     """
@@ -125,8 +131,8 @@ class GetProduct(Event[GetProductInput, GetProductOutput]):
     pass
 
 
-class ListProducts(Event[ListProductsInput, ListProductsOutput]):
-    """Event to list all products.
+class ListProducts(Command[ListProductsInput, ListProductsOutput]):
+    """Command to list all products.
 
     Convention: 'list' + 'Products' -> GET /products
     """
@@ -139,8 +145,8 @@ class ListProducts(Event[ListProductsInput, ListProductsOutput]):
     tags=["Products", "Search"],
     summary="Search products by criteria",
 )
-class SearchProducts(Event[SearchProductsInput, SearchProductsOutput]):
-    """Event to search products with custom endpoint.
+class SearchProducts(Command[SearchProductsInput, SearchProductsOutput]):
+    """Command to search products with custom endpoint.
 
     Uses @api_endpoint to override convention-based routing.
     """
@@ -149,8 +155,8 @@ class SearchProducts(Event[SearchProductsInput, SearchProductsOutput]):
 
 
 @exclude_from_api
-class InternalProductSync(Event[EventInput, EventOutput]):
-    """Internal event for product sync - not exposed via API.
+class InternalProductSync(Command[CommandRequest, CommandResponse]):
+    """Internal command for product sync - not exposed via API.
 
     Uses @exclude_from_api to prevent API endpoint generation.
     """
@@ -169,64 +175,62 @@ _next_id = 1
 
 @module(name="products", description="Product management module")
 class ProductModule(Module):
-    """Module that handles all product-related events."""
+    """Module that handles all product-related commands."""
 
-    def can_handle(self, event: Event) -> bool:
-        """Check if this module handles the event."""
-        return isinstance(
-            event, (CreateProduct, GetProduct, ListProducts, SearchProducts)
-        )
+    def can_handle(self, command: Command) -> bool:
+        """Check if this module handles the command."""
+        return isinstance(command, (CreateProduct, GetProduct, ListProducts, SearchProducts))
 
-    async def handle(self, event: Event) -> None:
-        """Handle product events."""
+    async def handle(self, command: Command) -> None:
+        """Handle product commands."""
         global _next_id
 
-        if isinstance(event, CreateProduct):
+        if isinstance(command, CreateProduct):
             product_id = str(_next_id)
             _next_id += 1
 
             product = {
                 "id": product_id,
-                "name": event.input.name,
-                "price": event.input.price,
-                "description": event.input.description,
+                "name": command.input.name,
+                "price": command.input.price,
+                "description": command.input.description,
             }
             _products[product_id] = product
 
-            event.output = CreateProductOutput(
+            command.output = CreateProductOutput(
                 id=product_id,
                 name=product["name"],
                 price=product["price"],
             )
-            event.handled = True
+            command.handled = True
 
-        elif isinstance(event, GetProduct):
-            product = _products.get(event.input.product_id)
+        elif isinstance(command, GetProduct):
+            product = _products.get(command.input.product_id)
             if not product:
-                raise ValueError(f"Product {event.input.product_id} not found")
+                raise ValueError(f"Product {command.input.product_id} not found")
 
-            event.output = GetProductOutput(
+            command.output = GetProductOutput(
                 id=product["id"],
                 name=product["name"],
                 price=product["price"],
                 description=product["description"],
             )
-            event.handled = True
+            command.handled = True
 
-        elif isinstance(event, ListProducts):
+        elif isinstance(command, ListProducts):
             all_products = list(_products.values())
-            start = event.input.offset
-            end = start + event.input.limit
+            start = command.input.offset
+            end = start + command.input.limit
             page = all_products[start:end]
 
-            event.output = ListProductsOutput(
+            command.output = ListProductsOutput(
                 products=page,
                 total=len(all_products),
             )
-            event.handled = True
+            command.handled = True
 
-        elif isinstance(event, SearchProducts):
-            query = event.input.query.lower()
+        elif isinstance(command, SearchProducts):
+            query = command.input.query.lower()
             results = []
 
             for product in _products.values():
@@ -235,18 +239,18 @@ class ProductModule(Module):
                     continue
 
                 # Price filters
-                if event.input.min_price and product["price"] < event.input.min_price:
+                if command.input.min_price and product["price"] < command.input.min_price:
                     continue
-                if event.input.max_price and product["price"] > event.input.max_price:
+                if command.input.max_price and product["price"] > command.input.max_price:
                     continue
 
                 results.append(product)
 
-            event.output = SearchProductsOutput(
+            command.output = SearchProductsOutput(
                 products=results,
                 total=len(results),
             )
-            event.handled = True
+            command.handled = True
 
 
 # =============================================================================
@@ -271,12 +275,12 @@ def create_app() -> FastAPI:
     host = ModuleHost()
     host.register(ProductModule())
 
-    # Create ModuleRouter and register events
+    # Create ModuleRouter and register commands
     router = ModuleRouter(host)
-    router.register_event(CreateProduct)
-    router.register_event(GetProduct)
-    router.register_event(ListProducts)
-    router.register_event(SearchProducts)
+    router.register_command(CreateProduct)
+    router.register_command(GetProduct)
+    router.register_command(ListProducts)
+    router.register_command(SearchProducts)
 
     # Mount router on app
     router.mount(app, prefix="/api/v1")

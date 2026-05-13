@@ -1,8 +1,8 @@
 """
-PyModules - Event-Driven Modular Architecture for Python
+PyModules - In-process command dispatch for Python
 
 A framework for building scalable, plugin-based applications using
-events and modules, inspired by NetModules.
+commands and modules, inspired by NetModules.
 
 Subpackages:
     pymodules.contrib.messaging - Distributed message broker integration
@@ -15,19 +15,19 @@ Subpackages:
 
 from .config import Metrics, ModuleHostConfig
 from .exceptions import (
+    CommandHandlingError,
     ConfigurationError,
     ConnectionError,
     DatabaseError,
-    EventHandlingError,
     ModuleRegistrationError,
     PyModulesError,
     RepositoryError,
 )
 from .host import ModuleHost
-from .interfaces import Event, EventInput, EventOutput
+from .interfaces import Command, CommandRequest, CommandResponse
 from .logging import configure_logging, get_logger
 from .module import Module, ModuleMetadata, module
-from .protocols import AsyncEventHandler, EventHandler, EventLike
+from .protocols import AsyncCommandHandler, CommandHandler, CommandLike
 from .resilience import (
     CircuitBreaker,
     CircuitBreakerOpen,
@@ -55,13 +55,13 @@ from .tracing import (
 
 __all__ = [
     # Core interfaces
-    "Event",
-    "EventInput",
-    "EventOutput",
+    "Command",
+    "CommandRequest",
+    "CommandResponse",
     # Protocols (structural typing)
-    "EventLike",
-    "EventHandler",
-    "AsyncEventHandler",
+    "CommandLike",
+    "CommandHandler",
+    "AsyncCommandHandler",
     # Module system
     "Module",
     "module",
@@ -72,7 +72,7 @@ __all__ = [
     "Metrics",
     # Exceptions
     "PyModulesError",
-    "EventHandlingError",
+    "CommandHandlingError",
     "ModuleRegistrationError",
     "ConfigurationError",
     "DatabaseError",

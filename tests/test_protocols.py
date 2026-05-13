@@ -2,134 +2,134 @@
 
 import asyncio
 
-from pymodules.protocols import AsyncEventHandler, EventHandler, EventLike
+from pymodules.protocols import AsyncCommandHandler, CommandHandler, CommandLike
 
 
-def test_event_like_protocol():
-    """Verify protocol accepts duck-typed events."""
+def test_command_like_protocol():
+    """Verify protocol accepts duck-typed commands."""
 
-    class CustomEvent:
+    class CustomCommand:
         name = "custom"
         input = None
         output = None
         handled = False
         meta = {}
 
-    def process(event: EventLike) -> None:
-        event.handled = True
+    def process(command: CommandLike) -> None:
+        command.handled = True
 
-    custom = CustomEvent()
+    custom = CustomCommand()
     process(custom)
     assert custom.handled is True
 
 
-def test_event_handler_protocol():
+def test_command_handler_protocol():
     """Verify protocol accepts duck-typed handlers."""
 
     class CustomHandler:
-        def can_handle(self, event) -> bool:
+        def can_handle(self, command) -> bool:
             return True
 
-        def handle(self, event) -> None:
-            event.handled = True
+        def handle(self, command) -> None:
+            command.handled = True
 
-    def dispatch(handler: EventHandler, event: EventLike) -> None:
-        if handler.can_handle(event):
-            handler.handle(event)
+    def dispatch(handler: CommandHandler, command: CommandLike) -> None:
+        if handler.can_handle(command):
+            handler.handle(command)
 
     handler = CustomHandler()
-    event = type(
-        "E", (), {"name": "x", "input": None, "output": None, "handled": False, "meta": {}}
+    command = type(
+        "C", (), {"name": "x", "input": None, "output": None, "handled": False, "meta": {}}
     )()
-    dispatch(handler, event)
-    assert event.handled is True
+    dispatch(handler, command)
+    assert command.handled is True
 
 
-def test_event_like_isinstance_check():
+def test_command_like_isinstance_check():
     """Verify runtime_checkable works with isinstance."""
 
-    class CustomEvent:
+    class CustomCommand:
         name = "custom"
         input = None
         output = None
         handled = False
         meta = {}
 
-    custom = CustomEvent()
-    assert isinstance(custom, EventLike)
+    custom = CustomCommand()
+    assert isinstance(custom, CommandLike)
 
 
-def test_event_handler_isinstance_check():
+def test_command_handler_isinstance_check():
     """Verify runtime_checkable works with isinstance for handlers."""
 
     class CustomHandler:
-        def can_handle(self, event) -> bool:
+        def can_handle(self, command) -> bool:
             return True
 
-        def handle(self, event) -> None:
+        def handle(self, command) -> None:
             pass
 
     handler = CustomHandler()
-    assert isinstance(handler, EventHandler)
+    assert isinstance(handler, CommandHandler)
 
 
-def test_non_conforming_event_fails_isinstance():
+def test_non_conforming_command_fails_isinstance():
     """Verify objects missing required attributes fail isinstance check."""
 
-    class IncompleteEvent:
+    class IncompleteCommand:
         name = "incomplete"
         # Missing: input, output, handled, meta
 
-    incomplete = IncompleteEvent()
-    assert not isinstance(incomplete, EventLike)
+    incomplete = IncompleteCommand()
+    assert not isinstance(incomplete, CommandLike)
 
 
 def test_non_conforming_handler_fails_isinstance():
     """Verify objects missing required methods fail isinstance check."""
 
     class IncompleteHandler:
-        def can_handle(self, event) -> bool:
+        def can_handle(self, command) -> bool:
             return True
 
         # Missing: handle method
 
     incomplete = IncompleteHandler()
-    assert not isinstance(incomplete, EventHandler)
+    assert not isinstance(incomplete, CommandHandler)
 
 
-def test_async_event_handler_isinstance_check():
-    """Verify AsyncEventHandler isinstance check works."""
+def test_async_command_handler_isinstance_check():
+    """Verify AsyncCommandHandler isinstance check works."""
 
     class AsyncHandler:
-        def can_handle(self, event) -> bool:
+        def can_handle(self, command) -> bool:
             return True
 
-        async def handle(self, event) -> None:
-            event.handled = True
+        async def handle(self, command) -> None:
+            command.handled = True
 
     handler = AsyncHandler()
-    assert isinstance(handler, AsyncEventHandler)
+    assert isinstance(handler, AsyncCommandHandler)
 
 
-def test_async_event_handler_dispatch():
+def test_async_command_handler_dispatch():
     """Verify async handler can be dispatched."""
 
     class AsyncHandler:
-        def can_handle(self, event) -> bool:
+        def can_handle(self, command) -> bool:
             return True
 
-        async def handle(self, event) -> None:
+        async def handle(self, command) -> None:
             await asyncio.sleep(0)  # Simulate async operation
-            event.handled = True
+            command.handled = True
 
-    async def dispatch(handler, event):
-        if handler.can_handle(event):
-            await handler.handle(event)
+    async def dispatch(handler, command):
+        if handler.can_handle(command):
+            await handler.handle(command)
 
     handler = AsyncHandler()
-    event = type(
-        "E", (), {"name": "x", "input": None, "output": None, "handled": False, "meta": {}}
+    command = type(
+        "C", (), {"name": "x", "input": None, "output": None, "handled": False, "meta": {}}
     )()
 
-    asyncio.run(dispatch(handler, event))
-    assert event.handled is True
+    asyncio.run(dispatch(handler, command))
+    assert command.handled is True

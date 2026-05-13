@@ -1,5 +1,5 @@
 """
-Integration tests for FastAPI integration.
+Integration tests for the legacy FastAPI integration shim.
 """
 
 from dataclasses import dataclass
@@ -12,60 +12,67 @@ pytest.importorskip("httpx")
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
+from pymodules import (
+    Command,
+    CommandRequest,
+    CommandResponse,
+    Module,
+    ModuleHost,
+    module,
+)
 from pymodules.fastapi import PyModulesAPI
 
 
 @dataclass
-class GreetInput(EventInput):
+class GreetInput(CommandRequest):
     name: str = ""
 
 
 @dataclass
-class GreetOutput(EventOutput):
+class GreetOutput(CommandResponse):
     message: str = ""
 
 
-class GreetEvent(Event[GreetInput, GreetOutput]):
+class GreetCommand(Command[GreetInput, GreetOutput]):
     name = "test.greet"
 
 
 @module(name="GreeterModule")
 class GreeterModule(Module):
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, GreetEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, GreetCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, GreetEvent):
-            event.output = GreetOutput(message=f"Hello, {event.input.name}!")
-            event.handled = True
+    def handle(self, command: Command) -> None:
+        if isinstance(command, GreetCommand):
+            command.output = GreetOutput(message=f"Hello, {command.input.name}!")
+            command.handled = True
 
 
 @dataclass
-class CalculateInput(EventInput):
+class CalculateInput(CommandRequest):
     a: int = 0
     b: int = 0
     operation: str = "add"
 
 
 @dataclass
-class CalculateOutput(EventOutput):
+class CalculateOutput(CommandResponse):
     result: int = 0
 
 
-class CalculateEvent(Event[CalculateInput, CalculateOutput]):
+class CalculateCommand(Command[CalculateInput, CalculateOutput]):
     name = "test.calculate"
 
 
 @module(name="CalculatorModule")
 class CalculatorModule(Module):
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, CalculateEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, CalculateCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, CalculateEvent):
-            a, b = event.input.a, event.input.b
-            op = event.input.operation
+    def handle(self, command: Command) -> None:
+        if isinstance(command, CalculateCommand):
+            a, b = command.input.a, command.input.b
+            op = command.input.operation
 
             if op == "add":
                 result = a + b
@@ -76,8 +83,8 @@ class CalculatorModule(Module):
             else:
                 result = 0
 
-            event.output = CalculateOutput(result=result)
-            event.handled = True
+            command.output = CalculateOutput(result=result)
+            command.handled = True
 
 
 @pytest.fixture
@@ -90,8 +97,8 @@ def app():
     app = FastAPI()
     api = PyModulesAPI(host)
 
-    api.add_event_endpoint(app, "/greet", GreetEvent, GreetInput, GreetOutput)
-    api.add_event_endpoint(app, "/calculate", CalculateEvent, CalculateInput, CalculateOutput)
+    api.add_command_endpoint(app, "/greet", GreetCommand, GreetInput, GreetOutput)
+    api.add_command_endpoint(app, "/calculate", CalculateCommand, CalculateInput, CalculateOutput)
 
     return app
 
@@ -104,7 +111,7 @@ def client(app):
 
 @pytest.mark.integration
 class TestFastAPIEndpoints:
-    """Tests for auto-generated FastAPI endpoints."""
+    """Tests for shim-generated FastAPI endpoints."""
 
     def test_greet_endpoint(self, client):
         """Test the greet endpoint."""
@@ -135,14 +142,14 @@ class TestFastAPIEndpoints:
 class TestFastAPIErrorHandling:
     """Tests for FastAPI error handling."""
 
-    def test_unhandled_event_returns_404(self):
-        """Test that unhandled events return 404."""
+    def test_unhandled_command_returns_404(self):
+        """Test that unhandled commands return 404."""
         host = ModuleHost()
         # No modules registered
 
         app = FastAPI()
         api = PyModulesAPI(host)
-        api.add_event_endpoint(app, "/greet", GreetEvent, GreetInput)
+        api.add_command_endpoint(app, "/greet", GreetCommand, GreetInput)
 
         client = TestClient(app)
         response = client.post("/greet", json={"name": "World"})
@@ -192,18 +199,18 @@ class TestFastAPIOpenAPI:
 
 @pytest.mark.integration
 class TestPyModulesAPIManualDispatch:
-    """Tests for manual event dispatch via PyModulesAPI."""
+    """Tests for manual command dispatch via PyModulesAPI."""
 
     @pytest.mark.asyncio
     async def test_manual_dispatch(self):
-        """Test manual event dispatch."""
+        """Test manual command dispatch."""
         host = ModuleHost()
         host.register(GreeterModule())
 
         api = PyModulesAPI(host)
 
-        event = GreetEvent(input=GreetInput(name="Manual"))
-        result = await api.dispatch(event)
+        command = GreetCommand(input=GreetInput(name="Manual"))
+        result = await api.dispatch(command)
 
         assert result.handled
         assert result.output.message == "Hello, Manual!"
@@ -216,9 +223,9 @@ class TestPyModulesAPIManualDispatch:
         host = ModuleHost()
         api = PyModulesAPI(host)
 
-        event = GreetEvent(input=GreetInput(name="Test"))
+        command = GreetCommand(input=GreetInput(name="Test"))
 
         with pytest.raises(HTTPException) as exc_info:
-            await api.dispatch(event)
+            await api.dispatch(command)
 
         assert exc_info.value.status_code == 404

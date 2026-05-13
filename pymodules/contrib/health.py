@@ -136,11 +136,11 @@ class HealthCheck:
 
         try:
             modules = len(self._host.modules)
-            events_in_progress = len(self._host.events_in_progress)
+            commands_in_progress = len(self._host.commands_in_progress)
 
             details: dict[str, Any] = {
                 "modules_registered": modules,
-                "events_in_progress": events_in_progress,
+                "commands_in_progress": commands_in_progress,
             }
 
             # Add metrics if available

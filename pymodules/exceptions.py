@@ -7,7 +7,7 @@ Provides typed exceptions for better error handling and debugging.
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from .interfaces import Event
+    from .interfaces import Command
     from .module import Module
 
 
@@ -17,32 +17,32 @@ class PyModulesError(Exception):
     pass
 
 
-class EventHandlingError(PyModulesError):
+class CommandHandlingError(PyModulesError):
     """
-    Raised when an error occurs during event handling.
+    Raised when an error occurs during command handling.
 
     Attributes:
-        event: The event that was being processed.
-        module: The module that raised the error (if known).
+        command: The command that was being processed.
+        module: The Module that raised the error (if known).
         original_error: The original exception that was caught.
     """
 
     def __init__(
         self,
         message: str,
-        event: Optional["Event"] = None,
+        command: Optional["Command"] = None,
         module: Optional["Module"] = None,
         original_error: Exception | None = None,
     ):
         super().__init__(message)
-        self.event = event
+        self.command = command
         self.module = module
         self.original_error = original_error
 
     def __str__(self) -> str:
         parts = [super().__str__()]
-        if self.event:
-            parts.append(f"Event: {self.event.name}")
+        if self.command:
+            parts.append(f"Command: {self.command.name}")
         if self.module:
             parts.append(f"Module: {self.module.metadata.name}")
         if self.original_error:

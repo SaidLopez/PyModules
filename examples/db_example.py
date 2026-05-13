@@ -12,14 +12,11 @@ Requirements:
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from uuid import UUID
 
 from sqlalchemy import Column, String
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from pymodules.contrib.db import Base, BaseRepository, SoftDeleteMixin, TimestampMixin, UUIDMixin
-
 
 # =============================================================================
 # Model Definition
@@ -135,7 +132,7 @@ async def main():
 
     # Soft delete user2
     await user_repo.soft_delete(user2.id)
-    print(f"   Soft deleted: Bob")
+    print("   Soft deleted: Bob")
 
     # Verify it's excluded from normal queries
     active_users = await user_repo.get_all()
@@ -147,7 +144,7 @@ async def main():
 
     # Restore
     await user_repo.restore(user2.id)
-    print(f"   Restored: Bob")
+    print("   Restored: Bob")
 
     active_after_restore = await user_repo.get_all()
     print(f"   Active users after restore: {len(active_after_restore)}")

@@ -38,7 +38,7 @@ class ErrorCode(str, Enum):
 
     # Internal errors (500)
     INTERNAL_ERROR = "internal_error"
-    EVENT_HANDLING_ERROR = "event_handling_error"
+    COMMAND_HANDLING_ERROR = "command_handling_error"
 
     # Service errors (503)
     SERVICE_UNAVAILABLE = "service_unavailable"
@@ -59,7 +59,7 @@ ERROR_CODE_STATUS_MAP: dict[ErrorCode, int] = {
     ErrorCode.CONFLICT: 409,
     ErrorCode.DUPLICATE_RESOURCE: 409,
     ErrorCode.INTERNAL_ERROR: 500,
-    ErrorCode.EVENT_HANDLING_ERROR: 500,
+    ErrorCode.COMMAND_HANDLING_ERROR: 500,
     ErrorCode.SERVICE_UNAVAILABLE: 503,
 }
 

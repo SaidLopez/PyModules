@@ -25,14 +25,14 @@ class ModuleHostConfig:
         propagate_exceptions: If True, exceptions from handlers are re-raised.
         log_level: Logging level for the framework.
         on_error: Optional callback for handling errors.
-        on_event_start: Optional callback when event dispatch starts.
-        on_event_end: Optional callback when event dispatch ends.
+        on_event_start: Optional callback when command dispatch starts.
+        on_event_end: Optional callback when command dispatch ends.
         enable_metrics: Enable basic metrics collection.
         enable_tracing: Enable distributed tracing.
-        rate_limiter: Optional rate limiter for event throttling.
+        rate_limiter: Optional rate limiter for command throttling.
         circuit_breaker: Optional circuit breaker for fault tolerance.
-        retry_policy: Optional retry policy for failed events.
-        dead_letter_queue: Optional DLQ for failed events.
+        retry_policy: Optional retry policy for failed commands.
+        dead_letter_queue: Optional DLQ for failed commands.
         tracer: Optional tracer for distributed tracing.
     """
 
@@ -65,7 +65,7 @@ class ModuleHostConfig:
             PYMODULES_LOG_LEVEL: DEBUG/INFO/WARNING/ERROR (default: INFO)
             PYMODULES_ENABLE_METRICS: "true"/"false" (default: false)
             PYMODULES_ENABLE_TRACING: "true"/"false" (default: false)
-            PYMODULES_RATE_LIMIT: Events per second, 0 to disable (default: 0)
+            PYMODULES_RATE_LIMIT: Commands per second, 0 to disable (default: 0)
             PYMODULES_RATE_LIMIT_BURST: Burst size for rate limiter (default: 10)
             PYMODULES_CIRCUIT_BREAKER_THRESHOLD: Failures before open (default: 0, disabled)
             PYMODULES_CIRCUIT_BREAKER_TIMEOUT: Recovery timeout seconds (default: 30)

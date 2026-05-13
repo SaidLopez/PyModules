@@ -7,10 +7,10 @@ from dataclasses import dataclass
 import pytest
 
 from pymodules import (
-    Event,
-    EventHandlingError,
-    EventInput,
-    EventOutput,
+    Command,
+    CommandHandlingError,
+    CommandRequest,
+    CommandResponse,
     Module,
     ModuleHost,
     ModuleHostConfig,
@@ -20,30 +20,30 @@ from pymodules import (
 
 
 @dataclass
-class ErrorInput(EventInput):
+class ErrorInput(CommandRequest):
     should_fail: bool = False
 
 
 @dataclass
-class ErrorOutput(EventOutput):
+class ErrorOutput(CommandResponse):
     result: str = ""
 
 
-class ErrorEvent(Event[ErrorInput, ErrorOutput]):
+class ErrorCommand(Command[ErrorInput, ErrorOutput]):
     name = "test.error"
 
 
 @module(name="ErrorModule", description="A module that can raise errors")
 class ErrorModule(Module):
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, ErrorEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, ErrorCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, ErrorEvent):
-            if event.input.should_fail:
+    def handle(self, command: Command) -> None:
+        if isinstance(command, ErrorCommand):
+            if command.input.should_fail:
                 raise ValueError("Intentional test error")
-            event.output = ErrorOutput(result="success")
-            event.handled = True
+            command.output = ErrorOutput(result="success")
+            command.handled = True
 
 
 @module(name="FailOnLoad", description="Fails during registration")
@@ -51,10 +51,10 @@ class FailOnLoadModule(Module):
     def on_load(self) -> None:
         raise RuntimeError("Failed to load")
 
-    def can_handle(self, event: Event) -> bool:
+    def can_handle(self, command: Command) -> bool:
         return False
 
-    def handle(self, event: Event) -> None:
+    def handle(self, command: Command) -> None:
         pass
 
 
@@ -67,13 +67,13 @@ class TestErrorPropagation:
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 
-        event = ErrorEvent(input=ErrorInput(should_fail=True))
+        command = ErrorCommand(input=ErrorInput(should_fail=True))
 
-        with pytest.raises(EventHandlingError) as exc_info:
-            host.handle(event)
+        with pytest.raises(CommandHandlingError) as exc_info:
+            host.dispatch(command)
 
         assert "Intentional test error" in str(exc_info.value)
-        assert exc_info.value.event is event
+        assert exc_info.value.command is command
         assert exc_info.value.original_error is not None
 
     def test_propagate_exceptions_false(self):
@@ -82,30 +82,30 @@ class TestErrorPropagation:
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 
-        event = ErrorEvent(input=ErrorInput(should_fail=True))
-        result = host.handle(event)
+        command = ErrorCommand(input=ErrorInput(should_fail=True))
+        result = host.dispatch(command)
 
-        # Should not raise, but event should not be marked as handled
-        assert result is event
-        assert not event.handled
+        # Should not raise, but command should not be marked as handled
+        assert result is command
+        assert not command.handled
 
     def test_on_error_callback(self):
         """Test that on_error callback is called on exceptions."""
         errors = []
 
-        def error_handler(error, event):
-            errors.append((error, event))
+        def error_handler(error, command):
+            errors.append((error, command))
 
         config = ModuleHostConfig(propagate_exceptions=False, on_error=error_handler)
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 
-        event = ErrorEvent(input=ErrorInput(should_fail=True))
-        host.handle(event)
+        command = ErrorCommand(input=ErrorInput(should_fail=True))
+        host.dispatch(command)
 
         assert len(errors) == 1
         assert isinstance(errors[0][0], ValueError)
-        assert errors[0][1] is event
+        assert errors[0][1] is command
 
 
 class TestRegistrationErrors:
@@ -134,35 +134,35 @@ class TestRegistrationErrors:
         assert len(host.modules) == 0
 
 
-class TestEventHandlingErrorDetails:
-    """Tests for EventHandlingError attributes."""
+class TestCommandHandlingErrorDetails:
+    """Tests for CommandHandlingError attributes."""
 
-    def test_error_includes_event(self):
-        """EventHandlingError should include the event."""
+    def test_error_includes_command(self):
+        """CommandHandlingError should include the command."""
         config = ModuleHostConfig(propagate_exceptions=True)
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 
-        event = ErrorEvent(input=ErrorInput(should_fail=True))
+        command = ErrorCommand(input=ErrorInput(should_fail=True))
 
         try:
-            host.handle(event)
-        except EventHandlingError as e:
-            assert e.event is event
+            host.dispatch(command)
+        except CommandHandlingError as e:
+            assert e.command is command
             assert e.module is not None
             assert e.module.metadata.name == "ErrorModule"
 
     def test_error_string_representation(self):
-        """Test string representation of EventHandlingError."""
+        """Test string representation of CommandHandlingError."""
         config = ModuleHostConfig(propagate_exceptions=True)
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 
-        event = ErrorEvent(input=ErrorInput(should_fail=True))
+        command = ErrorCommand(input=ErrorInput(should_fail=True))
 
         try:
-            host.handle(event)
-        except EventHandlingError as e:
+            host.dispatch(command)
+        except CommandHandlingError as e:
             error_str = str(e)
             assert "ErrorModule" in error_str
             assert "test.error" in error_str

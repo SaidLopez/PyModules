@@ -1,6 +1,6 @@
-"""Event auto-discovery module.
+"""Command auto-discovery module.
 
-Scans packages for Event classes and extracts metadata for API generation.
+Scans packages for Command classes and extracts metadata for API generation.
 """
 
 from __future__ import annotations
@@ -12,19 +12,19 @@ import pkgutil
 from dataclasses import dataclass, field
 from typing import Any, get_args, get_origin
 
-from pymodules import Event, EventInput, EventOutput
+from pymodules import Command, CommandRequest, CommandResponse
 
 from .decorators import get_api_metadata, is_excluded_from_api
 
 
 @dataclass
-class DiscoveredEvent:
-    """Represents a discovered Event class with its metadata."""
+class DiscoveredCommand:
+    """Represents a discovered Command class with its metadata."""
 
-    event_class: type[Event[Any, Any]]
-    input_class: type[EventInput]
-    output_class: type[EventOutput] | None
-    event_name: str = ""
+    command_class: type[Command[Any, Any]]
+    input_class: type[CommandRequest]
+    output_class: type[CommandResponse] | None
+    command_name: str = ""
     domain: str = ""
     action: str = ""
     module_path: str = ""
@@ -40,17 +40,17 @@ class DiscoveredEvent:
         return id_field in hints or "id" in hints
 
 
-class EventDiscovery:
-    """Discovers Event classes from Python packages.
+class CommandDiscovery:
+    """Discovers Command classes from Python packages.
 
-    Scans a package and its subpackages for Event class definitions,
+    Scans a package and its subpackages for Command class definitions,
     extracting metadata needed for API endpoint generation.
 
     Example:
-        discovery = EventDiscovery()
-        events = discovery.discover("myapp.events")
-        for event in events:
-            print(f"{event.event_name} -> {event.domain}.{event.action}")
+        discovery = CommandDiscovery()
+        commands = discovery.discover("myapp.commands")
+        for cmd in commands:
+            print(f"{cmd.command_name} -> {cmd.domain}.{cmd.action}")
     """
 
     def __init__(
@@ -61,21 +61,21 @@ class EventDiscovery:
         """Initialize the discovery engine.
 
         Args:
-            package_name: Root package to scan for Event classes (optional)
+            package_name: Root package to scan for Command classes (optional)
             exclude_patterns: Glob patterns for modules to exclude
         """
         self.package_name = package_name
         self.exclude_patterns = exclude_patterns or []
-        self._discovered: list[DiscoveredEvent] = []
+        self._discovered: list[DiscoveredCommand] = []
 
-    def discover(self, package_name: str | None = None) -> list[DiscoveredEvent]:
-        """Discover all Event classes in the package.
+    def discover(self, package_name: str | None = None) -> list[DiscoveredCommand]:
+        """Discover all Command classes in the package.
 
         Args:
             package_name: Package to scan (overrides constructor value)
 
         Returns:
-            List of discovered events with their metadata
+            List of discovered commands with their metadata
         """
         pkg_name = package_name or self.package_name
         if not pkg_name:
@@ -92,7 +92,7 @@ class EventDiscovery:
         return self._discovered
 
     def _scan_package(self, package: Any) -> None:
-        """Recursively scan a package for Event classes."""
+        """Recursively scan a package for Command classes."""
         for _importer, modname, _ispkg in pkgutil.walk_packages(
             package.__path__, prefix=package.__name__ + "."
         ):
@@ -104,7 +104,7 @@ class EventDiscovery:
                     continue
 
     def _should_scan_module(self, modname: str) -> bool:
-        """Check if a module should be scanned for events."""
+        """Check if a module should be scanned for commands."""
         parts = modname.split(".")
         last_part = parts[-1]
 
@@ -113,47 +113,47 @@ class EventDiscovery:
             if fnmatch.fnmatch(last_part, pattern):
                 return False
 
-        # Only scan modules ending with "events"
-        return last_part.endswith("events") or last_part == "events"
+        # Only scan modules named or ending with "commands"
+        return last_part.endswith("commands") or last_part == "commands"
 
     def _scan_module(self, module: Any) -> None:
-        """Scan a single module for Event classes."""
+        """Scan a single module for Command classes."""
         for _name, obj in inspect.getmembers(module, inspect.isclass):
-            if self._is_event_class(obj) and obj.__module__ == module.__name__:
-                discovered = self._extract_event_metadata(obj, module.__name__)
+            if self._is_command_class(obj) and obj.__module__ == module.__name__:
+                discovered = self._extract_command_metadata(obj, module.__name__)
                 if discovered:
                     self._discovered.append(discovered)
 
-    def _is_event_class(self, cls: type) -> bool:
-        """Check if a class is a concrete Event subclass."""
+    def _is_command_class(self, cls: type) -> bool:
+        """Check if a class is a concrete Command subclass."""
         if not isinstance(cls, type):
             return False
-        if cls is Event:
+        if cls is Command:
             return False
         try:
-            if not issubclass(cls, Event):
+            if not issubclass(cls, Command):
                 return False
         except TypeError:
             return False
         return True
 
-    def _extract_event_metadata(
-        self, event_class: type[Event[Any, Any]], module_path: str
-    ) -> DiscoveredEvent | None:
-        """Extract metadata from an Event class."""
-        if is_excluded_from_api(event_class):
+    def _extract_command_metadata(
+        self, command_class: type[Command[Any, Any]], module_path: str
+    ) -> DiscoveredCommand | None:
+        """Extract metadata from a Command class."""
+        if is_excluded_from_api(command_class):
             return None
 
-        event_name = getattr(event_class, "name", "") or ""
+        command_name = getattr(command_class, "name", "") or ""
 
-        # Parse domain and action from event name
-        if event_name and "." in event_name:
-            parts = event_name.split(".", 1)
+        # Parse domain and action from command name
+        if command_name and "." in command_name:
+            parts = command_name.split(".", 1)
             domain = parts[0]
             action = parts[1] if len(parts) > 1 else ""
         else:
             # Fall back to class name parsing
-            class_name = event_class.__name__
+            class_name = command_class.__name__
             domain = ""
             action = ""
             for prefix in ["create", "get", "update", "delete", "list", "search"]:
@@ -164,17 +164,17 @@ class EventDiscovery:
             if not domain:
                 domain = class_name.lower()
 
-        input_class, output_class = self._extract_type_params(event_class)
+        input_class, output_class = self._extract_type_params(command_class)
         if not input_class:
             return None
 
-        api_metadata = get_api_metadata(event_class)
+        api_metadata = get_api_metadata(command_class)
 
-        return DiscoveredEvent(
-            event_class=event_class,
+        return DiscoveredCommand(
+            command_class=command_class,
             input_class=input_class,
             output_class=output_class,
-            event_name=event_name,
+            command_name=command_name,
             domain=domain,
             action=action,
             module_path=module_path,
@@ -182,12 +182,12 @@ class EventDiscovery:
         )
 
     def _extract_type_params(
-        self, event_class: type[Event[Any, Any]]
-    ) -> tuple[type[EventInput] | None, type[EventOutput] | None]:
-        """Extract Input and Output type parameters from an Event class."""
-        for base in getattr(event_class, "__orig_bases__", []):
+        self, command_class: type[Command[Any, Any]]
+    ) -> tuple[type[CommandRequest] | None, type[CommandResponse] | None]:
+        """Extract request and response type parameters from a Command class."""
+        for base in getattr(command_class, "__orig_bases__", []):
             origin = get_origin(base)
-            if origin is Event:
+            if origin is Command:
                 args = get_args(base)
                 if len(args) >= 1:
                     input_class = args[0] if args[0] is not type(None) else None
@@ -197,13 +197,13 @@ class EventDiscovery:
         return None, None
 
 
-def discover_events(package_name: str) -> list[DiscoveredEvent]:
-    """Convenience function to discover events from a package.
+def discover_commands(package_name: str) -> list[DiscoveredCommand]:
+    """Convenience function to discover commands from a package.
 
     Args:
         package_name: Root package to scan
 
     Returns:
-        List of discovered events
+        List of discovered commands
     """
-    return EventDiscovery().discover(package_name)
+    return CommandDiscovery().discover(package_name)

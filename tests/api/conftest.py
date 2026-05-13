@@ -39,48 +39,48 @@ def client(app: FastAPI) -> TestClient:
 
 
 @pytest.fixture
-def sample_events():
-    """Create sample event classes for testing."""
-    from pymodules import Event, EventInput, EventOutput
+def sample_commands():
+    """Create sample command classes for testing."""
+    from pymodules import Command, CommandRequest, CommandResponse
 
     @dataclass
-    class CreateUserInput(EventInput):
+    class CreateUserInput(CommandRequest):
         name: str
         email: str
 
     @dataclass
-    class CreateUserOutput(EventOutput):
+    class CreateUserOutput(CommandResponse):
         id: str
         name: str
         email: str
 
     @dataclass
-    class GetUserInput(EventInput):
+    class GetUserInput(CommandRequest):
         user_id: str
 
     @dataclass
-    class GetUserOutput(EventOutput):
+    class GetUserOutput(CommandResponse):
         id: str
         name: str
         email: str
 
     @dataclass
-    class ListUsersInput(EventInput):
+    class ListUsersInput(CommandRequest):
         limit: int = 10
         offset: int = 0
 
     @dataclass
-    class ListUsersOutput(EventOutput):
+    class ListUsersOutput(CommandResponse):
         users: list
         total: int
 
-    class CreateUser(Event[CreateUserInput, CreateUserOutput]):
+    class CreateUser(Command[CreateUserInput, CreateUserOutput]):
         pass
 
-    class GetUser(Event[GetUserInput, GetUserOutput]):
+    class GetUser(Command[GetUserInput, GetUserOutput]):
         pass
 
-    class ListUsers(Event[ListUsersInput, ListUsersOutput]):
+    class ListUsers(Command[ListUsersInput, ListUsersOutput]):
         pass
 
     return {
@@ -97,42 +97,42 @@ def sample_events():
 
 
 @pytest.fixture
-def sample_module(sample_events):
-    """Create a sample module that handles the events."""
+def sample_module(sample_commands):
+    """Create a sample module that handles the commands."""
     from pymodules import Module, module
 
     @module(name="user", description="User management")
     class UserModule(Module):
-        def can_handle(self, event):
+        def can_handle(self, command):
             return isinstance(
-                event,
+                command,
                 (
-                    sample_events["CreateUser"],
-                    sample_events["GetUser"],
-                    sample_events["ListUsers"],
+                    sample_commands["CreateUser"],
+                    sample_commands["GetUser"],
+                    sample_commands["ListUsers"],
                 ),
             )
 
-        async def handle(self, event):
-            if isinstance(event, sample_events["CreateUser"]):
-                event.output = sample_events["CreateUserOutput"](
+        async def handle(self, command):
+            if isinstance(command, sample_commands["CreateUser"]):
+                command.output = sample_commands["CreateUserOutput"](
                     id="123",
-                    name=event.input.name,
-                    email=event.input.email,
+                    name=command.input.name,
+                    email=command.input.email,
                 )
-                event.handled = True
-            elif isinstance(event, sample_events["GetUser"]):
-                event.output = sample_events["GetUserOutput"](
-                    id=event.input.user_id,
+                command.handled = True
+            elif isinstance(command, sample_commands["GetUser"]):
+                command.output = sample_commands["GetUserOutput"](
+                    id=command.input.user_id,
                     name="Test User",
                     email="test@example.com",
                 )
-                event.handled = True
-            elif isinstance(event, sample_events["ListUsers"]):
-                event.output = sample_events["ListUsersOutput"](
+                command.handled = True
+            elif isinstance(command, sample_commands["ListUsers"]):
+                command.output = sample_commands["ListUsersOutput"](
                     users=[{"id": "1", "name": "User 1"}],
                     total=1,
                 )
-                event.handled = True
+                command.handled = True
 
     return UserModule()

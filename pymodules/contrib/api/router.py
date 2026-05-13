@@ -1,6 +1,6 @@
 """ModuleRouter with auto-discovery.
 
-Provides ModuleRouter that automatically discovers Event classes and creates
+Provides ModuleRouter that automatically discovers Command classes and creates
 FastAPI endpoints using convention-based routing.
 """
 
@@ -15,11 +15,11 @@ from fastapi import APIRouter, Body, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, create_model
 
-from pymodules import Event, EventInput, ModuleHost
+from pymodules import Command, CommandRequest, ModuleHost
 
 from .conventions import HTTPMethod, RESTConvention, RouteConvention, RouteInfo
 from .decorators import is_excluded_from_api
-from .discovery import DiscoveredEvent, EventDiscovery
+from .discovery import CommandDiscovery, DiscoveredCommand
 from .errors import APIError, NotFoundError
 
 T = TypeVar("T")
@@ -63,11 +63,11 @@ def _pydantic_to_dataclass(model: BaseModel, dc_class: type[T]) -> T:
 
 
 class ModuleRouter:
-    """Auto-discovering router that maps Event classes to FastAPI endpoints.
+    """Auto-discovering router that maps Command classes to FastAPI endpoints.
 
-    The router scans a package for Event classes, uses conventions to map
+    The router scans a package for Command classes, uses conventions to map
     them to REST paths and methods, and creates FastAPI endpoints that
-    dispatch events through a ModuleHost.
+    dispatch commands through a ModuleHost.
 
     Example:
         from pymodules import ModuleHost
@@ -77,7 +77,7 @@ class ModuleRouter:
         host.register(UserModule())
 
         router = ModuleRouter(host)
-        router.discover_events("myapp.events")
+        router.discover_commands("myapp.commands")
 
         app = FastAPI()
         router.mount(app)
@@ -91,86 +91,86 @@ class ModuleRouter:
         """Initialize the module router.
 
         Args:
-            host: ModuleHost for dispatching events
+            host: ModuleHost for dispatching commands
             convention: Route convention engine (uses RESTConvention if not provided)
         """
         self.host = host
         self.convention = convention or RESTConvention()
         self.router = APIRouter()
-        self._discovered_events: list[DiscoveredEvent] = []
-        self._registered_events: set[str] = set()
+        self._discovered_commands: list[DiscoveredCommand] = []
+        self._registered_commands: set[str] = set()
         self._request_models: dict[str, type[BaseModel]] = {}
 
-    def discover_events(self, package: str) -> int:
-        """Discover events from a package and create endpoints.
+    def discover_commands(self, package: str) -> int:
+        """Discover commands from a package and create endpoints.
 
         Args:
-            package: Package name to scan for Event classes
+            package: Package name to scan for Command classes
 
         Returns:
-            Number of events registered
+            Number of commands registered
         """
-        discovery = EventDiscovery()
-        events = discovery.discover(package)
+        discovery = CommandDiscovery()
+        commands = discovery.discover(package)
 
         count = 0
-        for event in events:
-            if self._register_discovered_event(event):
+        for cmd in commands:
+            if self._register_discovered_command(cmd):
                 count += 1
 
         return count
 
-    def register_event(self, event_class: type[Event[Any, Any]]) -> ModuleRouter:
-        """Manually register a single event class.
+    def register_command(self, command_class: type[Command[Any, Any]]) -> ModuleRouter:
+        """Manually register a single command class.
 
         Args:
-            event_class: Event class to register
+            command_class: Command class to register
 
         Returns:
             Self for method chaining
         """
-        if is_excluded_from_api(event_class):
+        if is_excluded_from_api(command_class):
             return self
 
-        discovery = EventDiscovery()
-        discovered = discovery._extract_event_metadata(event_class, event_class.__module__)
+        discovery = CommandDiscovery()
+        discovered = discovery._extract_command_metadata(command_class, command_class.__module__)
         if discovered:
-            self._register_discovered_event(discovered)
+            self._register_discovered_command(discovered)
         return self
 
-    def _register_discovered_event(self, event: DiscoveredEvent) -> bool:
-        """Register a single discovered event as an endpoint.
+    def _register_discovered_command(self, cmd: DiscoveredCommand) -> bool:
+        """Register a single discovered command as an endpoint.
 
         Returns:
-            True if event was registered, False if skipped
+            True if command was registered, False if skipped
         """
         # Skip duplicates
-        event_key = f"{event.event_class.__module__}.{event.event_class.__name__}"
-        if event_key in self._registered_events:
+        command_key = f"{cmd.command_class.__module__}.{cmd.command_class.__name__}"
+        if command_key in self._registered_commands:
             return False
 
-        route = self.convention.get_route(event.event_class)
+        route = self.convention.get_route(cmd.command_class)
 
         # Skip if not included in schema
-        api_meta = event.api_metadata
+        api_meta = cmd.api_metadata
         if api_meta.get("include_in_schema") is False:
             return False
 
         # Create request model for validation
         try:
-            request_model = _dataclass_to_pydantic(event.input_class)
-            self._request_models[event.event_name or event_key] = request_model
+            request_model = _dataclass_to_pydantic(cmd.input_class)
+            self._request_models[cmd.command_name or command_key] = request_model
         except (TypeError, ValueError):
             return False
 
         # Create the endpoint function
-        endpoint = self._create_endpoint(event, route, request_model)
+        endpoint = self._create_endpoint(cmd, route, request_model)
 
         # Determine response model
         response_model = None
-        if event.output_class:
+        if cmd.output_class:
             with contextlib.suppress(TypeError, ValueError):
-                response_model = _dataclass_to_pydantic(event.output_class)
+                response_model = _dataclass_to_pydantic(cmd.output_class)
 
         # Add route to router
         self.router.add_api_route(
@@ -178,28 +178,28 @@ class ModuleRouter:
             endpoint=endpoint,
             methods=[route.method.value],
             tags=list(route.tags),
-            summary=route.summary or self._generate_summary(event),
+            summary=route.summary or self._generate_summary(cmd),
             deprecated=route.deprecated,
             response_model=response_model,
             response_model_exclude_none=api_meta.get("response_model_exclude_none", True),
         )
 
-        self._discovered_events.append(event)
-        self._registered_events.add(event_key)
+        self._discovered_commands.append(cmd)
+        self._registered_commands.add(command_key)
         return True
 
     def _create_endpoint(
         self,
-        event: DiscoveredEvent,
+        cmd: DiscoveredCommand,
         route: RouteInfo,
         request_model: type[BaseModel],
     ) -> Callable[..., Any]:
-        """Create an endpoint function for an event."""
+        """Create an endpoint function for a command."""
         # Capture variables for closure
         host = self.host
-        event_class = event.event_class
-        input_class = event.input_class
-        api_meta = event.api_metadata
+        command_class = cmd.command_class
+        input_class = cmd.input_class
+        api_meta = cmd.api_metadata
         requires_id = route.requires_id
         id_param_name = route.id_param_name
 
@@ -215,9 +215,9 @@ class ModuleRouter:
                     request: Request,
                     id: str = Path(..., description="Resource ID"),
                 ) -> Any:
-                    return await _dispatch_event(
+                    return await _dispatch_command(
                         host=host,
-                        event_class=event_class,
+                        command_class=command_class,
                         input_class=input_class,
                         request=request,
                         path_id=id,
@@ -237,9 +237,9 @@ class ModuleRouter:
                     body: BodyType,  # type: ignore[valid-type]
                     id: str = Path(..., description="Resource ID"),
                 ) -> Any:
-                    return await _dispatch_event(
+                    return await _dispatch_command(
                         host=host,
-                        event_class=event_class,
+                        command_class=command_class,
                         input_class=input_class,
                         request=request,
                         path_id=id,
@@ -257,9 +257,9 @@ class ModuleRouter:
             if route.method == HTTPMethod.GET:
 
                 async def endpoint_get_no_id(request: Request) -> Any:
-                    return await _dispatch_event(
+                    return await _dispatch_command(
                         host=host,
-                        event_class=event_class,
+                        command_class=command_class,
                         input_class=input_class,
                         request=request,
                         path_id=None,
@@ -278,9 +278,9 @@ class ModuleRouter:
                     request: Request,
                     body: BodyType,  # type: ignore[valid-type]
                 ) -> Any:
-                    return await _dispatch_event(
+                    return await _dispatch_command(
                         host=host,
-                        event_class=event_class,
+                        command_class=command_class,
                         input_class=input_class,
                         request=request,
                         path_id=None,
@@ -294,10 +294,10 @@ class ModuleRouter:
                 endpoint_body_no_id.__annotations__["body"] = BodyType
                 return endpoint_body_no_id
 
-    def _generate_summary(self, event: DiscoveredEvent) -> str:
-        """Generate an OpenAPI summary from event metadata."""
-        action = (event.action or "handle").replace("_", " ").title()
-        domain = (event.domain or "event").replace("_", " ").title()
+    def _generate_summary(self, cmd: DiscoveredCommand) -> str:
+        """Generate an OpenAPI summary from command metadata."""
+        action = (cmd.action or "handle").replace("_", " ").title()
+        domain = (cmd.domain or "command").replace("_", " ").title()
         return f"{action} {domain}"
 
     def mount(self, app: Any, prefix: str = "") -> None:
@@ -310,15 +310,15 @@ class ModuleRouter:
         app.include_router(self.router, prefix=prefix)
 
     @property
-    def discovered_events(self) -> list[DiscoveredEvent]:
-        """Get list of discovered events."""
-        return self._discovered_events
+    def discovered_commands(self) -> list[DiscoveredCommand]:
+        """Get list of discovered commands."""
+        return self._discovered_commands
 
 
-async def _dispatch_event(
+async def _dispatch_command(
     host: ModuleHost,
-    event_class: type[Event[Any, Any]],
-    input_class: type[EventInput],
+    command_class: type[Command[Any, Any]],
+    input_class: type[CommandRequest],
     request: Request,
     path_id: str | None,
     id_param_name: str,
@@ -326,7 +326,7 @@ async def _dispatch_event(
     is_public: bool,
     required_permissions: list[str],
 ) -> Any:
-    """Dispatch an event through the ModuleHost."""
+    """Dispatch a command through the ModuleHost."""
     # Check authentication if not public
     if not is_public:
         user = getattr(request.state, "user", None)
@@ -364,27 +364,27 @@ async def _dispatch_event(
     except TypeError as e:
         raise HTTPException(status_code=400, detail=f"Invalid input: {e}") from e
 
-    # Create and dispatch event
-    event = event_class(input=input_instance)
+    # Create and dispatch command
+    command = command_class(input=input_instance)
 
     try:
-        await host.handle_async(event)
+        await host.dispatch_async(command)
     except APIError:
         raise
     except Exception as e:
         # Check for common error patterns
         error_msg = str(e).lower()
         if "not found" in error_msg:
-            raise NotFoundError(event_class.__name__.replace("Event", ""), str(path_id)) from e
+            raise NotFoundError(command_class.__name__.replace("Command", ""), str(path_id)) from e
         raise HTTPException(status_code=500, detail=str(e)) from e
 
-    if not event.handled:
-        raise HTTPException(status_code=501, detail=f"No handler for event: {event.name}")
+    if not command.handled:
+        raise HTTPException(status_code=501, detail=f"No handler for command: {command.name}")
 
-    if event.output is None:
+    if command.output is None:
         return JSONResponse(content={"success": True}, status_code=200)
 
     # Convert output to dict
-    if dataclasses.is_dataclass(event.output) and not isinstance(event.output, type):
-        return dataclasses.asdict(event.output)
-    return event.output
+    if dataclasses.is_dataclass(command.output) and not isinstance(command.output, type):
+        return dataclasses.asdict(command.output)
+    return command.output

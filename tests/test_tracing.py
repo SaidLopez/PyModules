@@ -7,9 +7,9 @@ from dataclasses import dataclass
 import pytest
 
 from pymodules import (
-    Event,
-    EventInput,
-    EventOutput,
+    Command,
+    CommandRequest,
+    CommandResponse,
     Module,
     ModuleHost,
     ModuleHostConfig,
@@ -27,28 +27,28 @@ from pymodules import (
 
 
 @dataclass
-class TracingInput(EventInput):
+class TracingInput(CommandRequest):
     value: str = ""
 
 
 @dataclass
-class TracingOutput(EventOutput):
+class TracingOutput(CommandResponse):
     result: str = ""
 
 
-class TracingEvent(Event[TracingInput, TracingOutput]):
+class TracingCommand(Command[TracingInput, TracingOutput]):
     name = "test.tracing"
 
 
 @module(name="TracingModule")
 class TracingModule(Module):
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, TracingEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, TracingCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, TracingEvent):
-            event.output = TracingOutput(result=f"traced: {event.input.value}")
-            event.handled = True
+    def handle(self, command: Command) -> None:
+        if isinstance(command, TracingCommand):
+            command.output = TracingOutput(result=f"traced: {command.input.value}")
+            command.handled = True
 
 
 class TestGenerateId:
@@ -88,7 +88,7 @@ class TestSpan:
         assert span.duration_ms is not None
 
     def test_span_add_event(self):
-        """Span can have events."""
+        """Span can record named timestamps on the span timeline."""
         span = Span(name="test")
         span.add_event("checkpoint", {"data": "value"})
 
@@ -281,30 +281,30 @@ class TestGlobalTracer:
         assert get_correlation_id() is None
 
 
-class TestEventTracing:
-    """Tests for event tracing utilities."""
+class TestCommandTracing:
+    """Tests for command tracing utilities."""
 
     def test_inject_trace_context(self):
-        """Trace context is injected into event."""
+        """Trace context is injected into command."""
         tracer = Tracer()
         set_tracer(tracer)
 
-        event = TracingEvent(input=TracingInput(value="test"))
+        command = TracingCommand(input=TracingInput(value="test"))
 
         with tracer.trace("operation", correlation_id="my-id") as ctx:
-            inject_trace_context(event)
+            inject_trace_context(command)
 
-        assert event.meta["trace_id"] == ctx.trace_id
-        assert event.meta["correlation_id"] == "my-id"
+        assert command.meta["trace_id"] == ctx.trace_id
+        assert command.meta["correlation_id"] == "my-id"
 
     def test_extract_trace_context(self):
-        """Trace context can be extracted from event."""
-        event = TracingEvent(input=TracingInput(value="test"))
-        event.meta["trace_id"] = "abc123"
-        event.meta["correlation_id"] = "xyz789"
-        event.meta["parent_span_id"] = "span123"
+        """Trace context can be extracted from command."""
+        command = TracingCommand(input=TracingInput(value="test"))
+        command.meta["trace_id"] = "abc123"
+        command.meta["correlation_id"] = "xyz789"
+        command.meta["parent_span_id"] = "span123"
 
-        trace_id, correlation_id, parent_span_id = extract_trace_context(event)
+        trace_id, correlation_id, parent_span_id = extract_trace_context(command)
 
         assert trace_id == "abc123"
         assert correlation_id == "xyz789"
@@ -320,11 +320,11 @@ class TestHostWithTracing:
         host = ModuleHost(config=config)
         host.register(TracingModule())
 
-        event = TracingEvent(input=TracingInput(value="test"))
-        host.handle(event)
+        command = TracingCommand(input=TracingInput(value="test"))
+        host.dispatch(command)
 
-        # Event should have trace context
-        assert "correlation_id" in event.meta
+        # Command should have trace context
+        assert "correlation_id" in command.meta
 
     def test_tracing_disabled_no_context(self):
         """ModuleHost doesn't inject trace context when disabled."""
@@ -332,8 +332,8 @@ class TestHostWithTracing:
         host = ModuleHost(config=config)
         host.register(TracingModule())
 
-        event = TracingEvent(input=TracingInput(value="test"))
-        host.handle(event)
+        command = TracingCommand(input=TracingInput(value="test"))
+        host.dispatch(command)
 
-        # Event should not have trace context
-        assert "trace_id" not in event.meta
+        # Command should not have trace context
+        assert "trace_id" not in command.meta

@@ -1,8 +1,8 @@
 """
 Module base class for PyModules.
 
-Modules are event handlers that declare what events they can process.
-They are registered with a ModuleHost and receive events through the
+Modules are command handlers that declare which commands they can process.
+They are registered with a ModuleHost and receive commands through the
 can_handle/handle pattern.
 """
 
@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from .interfaces import Event
+from .interfaces import Command
 
 if TYPE_CHECKING:
     from .host import ModuleHost
@@ -31,7 +31,7 @@ def module(name: str = "", description: str = "", version: str = "1.0.0") -> Cal
     Decorator to add metadata to a module class.
 
     Example:
-        @module(name="Greeter", description="Handles greeting events")
+        @module(name="Greeter", description="Handles greeting commands")
         class GreeterModule(Module):
             ...
     """
@@ -48,27 +48,27 @@ def module(name: str = "", description: str = "", version: str = "1.0.0") -> Cal
 
 class Module(ABC):
     """
-    Abstract base class for event handler modules.
+    Abstract base class for command handler modules.
 
-    Subclass this to create a module that handles specific event types.
-    Override can_handle() to declare which events you support, and
-    handle() to process those events.
+    Subclass this to create a module that handles specific command types.
+    Override can_handle() to declare which commands you support, and
+    handle() to process those commands.
 
     Each module has access to its host via the `host` property,
-    allowing it to dispatch events to other modules.
+    allowing it to dispatch commands to other modules.
 
     Example:
-        @module(name="Greeter", description="Handles greeting events")
+        @module(name="Greeter", description="Handles greeting commands")
         class GreeterModule(Module):
-            def can_handle(self, event: Event) -> bool:
-                return isinstance(event, GreetEvent)
+            def can_handle(self, command: Command) -> bool:
+                return isinstance(command, GreetCommand)
 
-            def handle(self, event: Event) -> None:
-                if isinstance(event, GreetEvent):
-                    event.output = GreetOutput(
-                        message=f"Hello, {event.input.name}!"
+            def handle(self, command: Command) -> None:
+                if isinstance(command, GreetCommand):
+                    command.output = GreetResponse(
+                        message=f"Hello, {command.input.name}!"
                     )
-                    event.handled = True
+                    command.handled = True
     """
 
     _module_metadata: ModuleMetadata = ModuleMetadata()
@@ -90,32 +90,32 @@ class Module(ABC):
         return self.__class__._module_metadata
 
     @abstractmethod
-    def can_handle(self, event: Event) -> bool:
+    def can_handle(self, command: Command) -> bool:
         """
-        Return True if this module can handle the given event.
+        Return True if this module can handle the given command.
 
         This is called by ModuleHost before handle() to determine
-        if this module should process the event.
+        if this module should process the command.
 
         Args:
-            event: The event to check
+            command: The command to check
 
         Returns:
-            True if this module can handle the event
+            True if this module can handle the command
         """
         pass
 
     @abstractmethod
-    def handle(self, event: Event) -> None:
+    def handle(self, command: Command) -> None:
         """
-        Process the event.
+        Process the command.
 
-        Set event.output with the result and event.handled = True
+        Set command.output with the response and command.handled = True
         to indicate successful processing. If handled is True,
-        no other modules will receive this event.
+        no other modules will receive this command.
 
         Args:
-            event: The event to handle
+            command: The command to handle
         """
         pass
 

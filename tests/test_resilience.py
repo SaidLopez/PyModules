@@ -11,10 +11,10 @@ from pymodules import (
     CircuitBreaker,
     CircuitBreakerOpen,
     CircuitState,
+    Command,
+    CommandRequest,
+    CommandResponse,
     DeadLetterQueue,
-    Event,
-    EventInput,
-    EventOutput,
     Fallback,
     Module,
     ModuleHost,
@@ -27,17 +27,17 @@ from pymodules import (
 
 
 @dataclass
-class TestInput(EventInput):
+class TestInput(CommandRequest):
     value: str = ""
     should_fail: bool = False
 
 
 @dataclass
-class TestOutput(EventOutput):
+class TestOutput(CommandResponse):
     result: str = ""
 
 
-class TestEvent(Event[TestInput, TestOutput]):
+class TestCommand(Command[TestInput, TestOutput]):
     name = "test.resilience"
 
 
@@ -47,16 +47,16 @@ class FailingModule(Module):
         super().__init__()
         self.call_count = 0
 
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, TestEvent)
+    def can_handle(self, command: Command) -> bool:
+        return isinstance(command, TestCommand)
 
-    def handle(self, event: Event) -> None:
-        if isinstance(event, TestEvent):
+    def handle(self, command: Command) -> None:
+        if isinstance(command, TestCommand):
             self.call_count += 1
-            if event.input.should_fail:
+            if command.input.should_fail:
                 raise ValueError("Intentional failure")
-            event.output = TestOutput(result=f"processed: {event.input.value}")
-            event.handled = True
+            command.output = TestOutput(result=f"processed: {command.input.value}")
+            command.handled = True
 
 
 class TestRateLimiter:
@@ -257,13 +257,13 @@ class TestDeadLetterQueue:
     def test_add_entry(self):
         """DLQ accepts entries."""
         dlq = DeadLetterQueue(max_size=100)
-        event = TestEvent(input=TestInput(value="test"))
+        command = TestCommand(input=TestInput(value="test"))
         error = ValueError("Test error")
 
-        entry = dlq.add(event, error, module_name="TestModule")
+        entry = dlq.add(command, error, module_name="TestModule")
 
         assert len(dlq) == 1
-        assert entry.event is event
+        assert entry.command is command
         assert entry.error is error
         assert entry.module_name == "TestModule"
 
@@ -272,27 +272,27 @@ class TestDeadLetterQueue:
         dlq = DeadLetterQueue(max_size=2)
 
         for i in range(5):
-            event = TestEvent(input=TestInput(value=str(i)))
-            dlq.add(event, ValueError(f"Error {i}"))
+            command = TestCommand(input=TestInput(value=str(i)))
+            dlq.add(command, ValueError(f"Error {i}"))
 
         assert len(dlq) == 2
         # Oldest entries should be dropped
         entries = dlq.entries
-        assert entries[0].event.input.value == "3"
-        assert entries[1].event.input.value == "4"
+        assert entries[0].command.input.value == "3"
+        assert entries[1].command.input.value == "4"
 
     def test_pop(self):
         """DLQ supports pop."""
         dlq = DeadLetterQueue(max_size=10)
 
-        event1 = TestEvent(input=TestInput(value="first"))
-        event2 = TestEvent(input=TestInput(value="second"))
+        command1 = TestCommand(input=TestInput(value="first"))
+        command2 = TestCommand(input=TestInput(value="second"))
 
-        dlq.add(event1, ValueError("Error 1"))
-        dlq.add(event2, ValueError("Error 2"))
+        dlq.add(command1, ValueError("Error 1"))
+        dlq.add(command2, ValueError("Error 2"))
 
         entry = dlq.pop()
-        assert entry.event.input.value == "first"
+        assert entry.command.input.value == "first"
         assert len(dlq) == 1
 
     def test_clear(self):
@@ -300,7 +300,7 @@ class TestDeadLetterQueue:
         dlq = DeadLetterQueue(max_size=10)
 
         for i in range(5):
-            dlq.add(TestEvent(input=TestInput(value=str(i))), ValueError(""))
+            dlq.add(TestCommand(input=TestInput(value=str(i))), ValueError(""))
 
         count = dlq.clear()
         assert count == 5
@@ -314,11 +314,11 @@ class TestDeadLetterQueue:
             added_entries.append(entry)
 
         dlq = DeadLetterQueue(max_size=10, on_add=on_add)
-        event = TestEvent(input=TestInput(value="test"))
-        dlq.add(event, ValueError("Error"))
+        command = TestCommand(input=TestInput(value="test"))
+        dlq.add(command, ValueError("Error"))
 
         assert len(added_entries) == 1
-        assert added_entries[0].event is event
+        assert added_entries[0].command is command
 
 
 class TestFallback:
@@ -387,15 +387,15 @@ class TestHostWithResilience:
         host = ModuleHost(config=config)
         host.register(FailingModule())
 
-        # First event should succeed
-        event1 = TestEvent(input=TestInput(value="test"))
-        host.handle(event1)
-        assert event1.handled
+        # First command should succeed
+        command1 = TestCommand(input=TestInput(value="test"))
+        host.dispatch(command1)
+        assert command1.handled
 
-        # Second event should be rate limited
-        event2 = TestEvent(input=TestInput(value="test2"))
+        # Second command should be rate limited
+        command2 = TestCommand(input=TestInput(value="test2"))
         with pytest.raises(RateLimitExceeded):
-            host.handle(event2)
+            host.dispatch(command2)
 
         assert host.metrics.events_rate_limited == 1
 
@@ -411,18 +411,18 @@ class TestHostWithResilience:
 
         # Cause failures to open circuit
         for _ in range(2):
-            event = TestEvent(input=TestInput(should_fail=True))
-            host.handle(event)
+            command = TestCommand(input=TestInput(should_fail=True))
+            host.dispatch(command)
 
         # Next request should be rejected by circuit breaker
-        event = TestEvent(input=TestInput(value="test"))
+        command = TestCommand(input=TestInput(value="test"))
         with pytest.raises(CircuitBreakerOpen):
-            host.handle(event)
+            host.dispatch(command)
 
         assert host.metrics.events_circuit_broken == 1
 
     def test_dlq_integration(self):
-        """ModuleHost sends failed events to DLQ."""
+        """ModuleHost sends failed commands to DLQ."""
         dlq = DeadLetterQueue(max_size=100)
         config = ModuleHostConfig(
             dead_letter_queue=dlq,
@@ -432,8 +432,8 @@ class TestHostWithResilience:
         host = ModuleHost(config=config)
         host.register(FailingModule())
 
-        event = TestEvent(input=TestInput(should_fail=True))
-        host.handle(event)
+        command = TestCommand(input=TestInput(should_fail=True))
+        host.dispatch(command)
 
         assert len(dlq) == 1
         assert host.metrics.events_dead_lettered == 1
@@ -449,8 +449,8 @@ class TestHostWithResilience:
         mod = FailingModule()
         host.register(mod)
 
-        event = TestEvent(input=TestInput(should_fail=True))
-        host.handle(event)
+        command = TestCommand(input=TestInput(should_fail=True))
+        host.dispatch(command)
 
         # Should have been called 3 times (1 + 2 retries)
         assert mod.call_count == 3

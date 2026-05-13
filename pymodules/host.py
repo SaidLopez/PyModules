@@ -1,7 +1,7 @@
 """
-ModuleHost - Central dispatcher for the PyModules event system.
+ModuleHost - Central dispatcher for the PyModules command system.
 
-The ModuleHost manages module registration and routes events to
+The ModuleHost manages module registration and routes commands to
 appropriate handlers based on their can_handle() declarations.
 """
 
@@ -11,8 +11,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from .config import Metrics, ModuleHostConfig
-from .exceptions import EventHandlingError, ModuleRegistrationError
-from .interfaces import Event
+from .exceptions import CommandHandlingError, ModuleRegistrationError
+from .interfaces import Command
 from .logging import configure_logging, host_logger
 from .module import Module
 from .resilience import CircuitBreakerOpen, RateLimitExceeded
@@ -21,12 +21,12 @@ from .tracing import inject_trace_context
 
 class ModuleHost:
     """
-    Central coordinator that manages modules and dispatches events.
+    Central coordinator that manages modules and dispatches commands.
 
     The ModuleHost is the core of the PyModules system. It:
     - Registers and manages module instances
-    - Routes events to modules that can handle them
-    - Provides both sync and async event handling
+    - Routes commands to modules that can handle them
+    - Provides both sync and async dispatch
     - Supports configurable error handling and logging
     - Includes resilience features: rate limiting, circuit breaker, retry, DLQ
     - Supports distributed tracing with correlation IDs
@@ -36,9 +36,9 @@ class ModuleHost:
         host.register(GreeterModule())
         host.register(LoggingModule())
 
-        event = GreetEvent(input=GreetInput(name="World"))
-        host.handle(event)
-        print(event.output.message)  # "Hello, World!"
+        command = GreetCommand(input=GreetRequest(name="World"))
+        host.dispatch(command)
+        print(command.output.message)  # "Hello, World!"
 
     Example with configuration:
         from pymodules.config import ModuleHostConfig
@@ -65,7 +65,7 @@ class ModuleHost:
         """
         self._config = config or ModuleHostConfig.from_env()
         self._modules: list[Module] = []
-        self._events_in_progress: dict[str, Event] = {}
+        self._commands_in_progress: dict[str, Command] = {}
         self._executor = ThreadPoolExecutor(max_workers=self._config.max_workers)
         self._metrics = Metrics() if self._config.enable_metrics else None
         self._start_time = time.time()
@@ -89,9 +89,9 @@ class ModuleHost:
         return self._modules.copy()
 
     @property
-    def events_in_progress(self) -> dict[str, Event]:
-        """Currently processing events (for monitoring)."""
-        return self._events_in_progress.copy()
+    def commands_in_progress(self) -> dict[str, Command]:
+        """Currently processing commands (for monitoring)."""
+        return self._commands_in_progress.copy()
 
     @property
     def metrics(self) -> Metrics | None:
@@ -108,7 +108,7 @@ class ModuleHost:
         Register a module with this host.
 
         The module's host property will be set to this host,
-        allowing it to dispatch events to other modules.
+        allowing it to dispatch commands to other modules.
 
         Args:
             module: The module to register
@@ -170,19 +170,19 @@ class ModuleHost:
             host_logger.info("Unregistered module: %s", module.metadata.name)
         return self
 
-    def can_handle(self, event: Event) -> bool:
+    def can_handle(self, command: Command) -> bool:
         """
-        Check if any registered module can handle the event.
+        Check if any registered module can handle the command.
 
         Args:
-            event: The event to check
+            command: The command to check
 
         Returns:
-            True if at least one module can handle the event
+            True if at least one module can handle the command
         """
-        return any(m.can_handle(event) for m in self._modules)
+        return any(m.can_handle(command) for m in self._modules)
 
-    def _check_rate_limit(self, event: Event) -> None:
+    def _check_rate_limit(self, command: Command) -> None:
         """Check rate limit and raise if exceeded."""
         if self._config.rate_limiter:
             try:
@@ -190,50 +190,50 @@ class ModuleHost:
             except RateLimitExceeded:
                 if self._metrics:
                     self._metrics.events_rate_limited += 1
-                host_logger.warning("Rate limit exceeded for event %s", event.name)
+                host_logger.warning("Rate limit exceeded for command %s", command.name)
                 raise
 
-    def _check_circuit_breaker(self, event: Event) -> None:
+    def _check_circuit_breaker(self, command: Command) -> None:
         """Check circuit breaker and raise if open."""
         if self._config.circuit_breaker:
             if not self._config.circuit_breaker.allow_request():
                 if self._metrics:
                     self._metrics.events_circuit_broken += 1
-                host_logger.warning("Circuit breaker open for event %s", event.name)
+                host_logger.warning("Circuit breaker open for command %s", command.name)
                 raise CircuitBreakerOpen("Circuit breaker is open")
 
-    def _prepare_dispatch(self, event: Event) -> str:
+    def _prepare_dispatch(self, command: Command) -> str:
         """
-        Common setup for event dispatch.
+        Common setup for command dispatch.
 
-        Injects trace context, records event in progress, updates metrics,
+        Injects trace context, records command in progress, updates metrics,
         and calls on_event_start callback.
 
         Args:
-            event: The event being dispatched
+            command: The command being dispatched
 
         Returns:
-            event_id for tracking the event
+            command_id for tracking the command
         """
         # Inject trace context if tracing enabled
         if self._config.enable_tracing:
-            inject_trace_context(event)
+            inject_trace_context(command)
 
-        event_id = str(id(event))
-        self._events_in_progress[event_id] = event
+        command_id = str(id(command))
+        self._commands_in_progress[command_id] = command
 
         if self._metrics:
             self._metrics.events_dispatched += 1
 
         if self._config.on_event_start:
             try:
-                self._config.on_event_start(event)
+                self._config.on_event_start(command)
             except Exception as e:
                 host_logger.warning("on_event_start callback failed: %s", e)
 
-        return event_id
+        return command_id
 
-    def _handle_dispatch_error(self, event: Event, module: Module, error: Exception) -> None:
+    def _handle_dispatch_error(self, command: Command, module: Module, error: Exception) -> None:
         """
         Common error handling for dispatch failures.
 
@@ -241,14 +241,14 @@ class ModuleHost:
         and calls on_error callback.
 
         Args:
-            event: The event that failed
+            command: The command that failed
             module: The module that raised the error
             error: The exception that was raised
         """
         host_logger.error(
-            "Error in module %s handling event %s: %s",
+            "Error in module %s handling command %s: %s",
             module.metadata.name,
-            event.name,
+            command.name,
             error,
             exc_info=True,
         )
@@ -259,7 +259,7 @@ class ModuleHost:
         # Send to DLQ if configured
         if self._config.dead_letter_queue is not None:
             self._config.dead_letter_queue.add(
-                event=event,
+                command=command,
                 error=error,
                 module_name=module.metadata.name,
             )
@@ -268,58 +268,58 @@ class ModuleHost:
 
         if self._config.on_error:
             try:
-                self._config.on_error(error, event)
+                self._config.on_error(error, command)
             except Exception as callback_error:
                 host_logger.warning("on_error callback failed: %s", callback_error)
 
     def _finalize_dispatch(
-        self, event: Event, event_id: str, error_occurred: Exception | None
+        self, command: Command, command_id: str, error_occurred: Exception | None
     ) -> None:
         """
-        Common cleanup after event dispatch.
+        Common cleanup after command dispatch.
 
-        Removes event from in-progress, updates metrics, and calls
+        Removes command from in-progress, updates metrics, and calls
         on_event_end callback.
 
         Args:
-            event: The event that was dispatched
-            event_id: The event tracking ID
+            command: The command that was dispatched
+            command_id: The command tracking ID
             error_occurred: Any error that occurred during dispatch
         """
-        del self._events_in_progress[event_id]
+        del self._commands_in_progress[command_id]
 
         if self._metrics and error_occurred is None:
-            if event.handled:
+            if command.handled:
                 self._metrics.events_handled += 1
             else:
                 self._metrics.events_unhandled += 1
 
         if self._config.on_event_end:
             try:
-                self._config.on_event_end(event, event.handled)
+                self._config.on_event_end(command, command.handled)
             except Exception as e:
                 host_logger.warning("on_event_end callback failed: %s", e)
 
-    def _handle_with_retry(self, event: Event, module: Module, attempt: int = 0) -> bool:
-        """Handle event with retry logic."""
+    def _handle_with_retry(self, command: Command, module: Module, attempt: int = 0) -> bool:
+        """Handle command with retry logic."""
         try:
             # Check if handler is async
             if inspect.iscoroutinefunction(module.handle):
                 # Run async handler - check for existing running loop first
                 try:
                     asyncio.get_running_loop()
-                    # Cannot safely run async handler from sync handle() when loop is running
+                    # Cannot safely run async handler from sync dispatch() when loop is running
                     raise RuntimeError(
-                        "Cannot call sync handle() with async handler from async context. "
-                        "Use handle_async() instead."
+                        "Cannot call sync dispatch() with async handler from async context. "
+                        "Use dispatch_async() instead."
                     )
                 except RuntimeError as e:
-                    if "Cannot call sync handle()" in str(e):
+                    if "Cannot call sync dispatch()" in str(e):
                         raise
                     # No running loop - use asyncio.run() which handles loop lifecycle
-                    asyncio.run(module.handle(event))
+                    asyncio.run(module.handle(command))
             else:
-                module.handle(event)
+                module.handle(command)
 
             # Record success with circuit breaker
             if self._config.circuit_breaker:
@@ -339,100 +339,100 @@ class ModuleHost:
 
                 delay = self._config.retry_policy.calculate_delay(attempt)
                 host_logger.warning(
-                    "Retrying event %s (attempt %d) after %.2fs: %s",
-                    event.name,
+                    "Retrying command %s (attempt %d) after %.2fs: %s",
+                    command.name,
                     attempt + 1,
                     delay,
                     e,
                 )
                 time.sleep(delay)
-                return self._handle_with_retry(event, module, attempt + 1)
+                return self._handle_with_retry(command, module, attempt + 1)
 
             # No more retries, raise or send to DLQ
             raise
 
-    def handle(self, event: Event) -> Event:
+    def dispatch(self, command: Command) -> Command:
         """
-        Dispatch an event to registered modules.
+        Dispatch a command to registered modules.
 
-        The event is passed to each module's can_handle() method.
+        The command is passed to each module's can_handle() method.
         If a module can handle it, handle() is called. Processing
-        stops when a module sets event.handled = True.
+        stops when a module sets command.handled = True.
 
         Args:
-            event: The event to dispatch
+            command: The command to dispatch
 
         Returns:
-            The event (with output set if handled)
+            The command (with output set if handled)
 
         Raises:
-            EventHandlingError: If propagate_exceptions is True and
+            CommandHandlingError: If propagate_exceptions is True and
                                a handler raises an exception.
             RateLimitExceeded: If rate limit is exceeded.
             CircuitBreakerOpen: If circuit breaker is open.
         """
         # Check rate limit (sync version)
-        self._check_rate_limit(event)
+        self._check_rate_limit(command)
 
         # Check circuit breaker
-        self._check_circuit_breaker(event)
+        self._check_circuit_breaker(command)
 
         # Common setup
-        event_id = self._prepare_dispatch(event)
+        command_id = self._prepare_dispatch(command)
 
-        host_logger.debug("Dispatching event: %s (id=%s)", event.name, event_id)
+        host_logger.debug("Dispatching command: %s (id=%s)", command.name, command_id)
 
         error_occurred = None
 
         try:
             for module in self._modules:
-                if module.can_handle(event):
+                if module.can_handle(command):
                     host_logger.debug(
-                        "Module %s handling event %s",
+                        "Module %s handling command %s",
                         module.metadata.name,
-                        event.name,
+                        command.name,
                     )
                     try:
-                        self._handle_with_retry(event, module)
+                        self._handle_with_retry(command, module)
                     except Exception as e:
                         error_occurred = e
-                        self._handle_dispatch_error(event, module, e)
+                        self._handle_dispatch_error(command, module, e)
 
                         if self._config.propagate_exceptions:
-                            raise EventHandlingError(
+                            raise CommandHandlingError(
                                 f"Handler error in {module.metadata.name}",
-                                event=event,
+                                command=command,
                                 module=module,
                                 original_error=e,
                             ) from e
                         break
 
-                    if event.handled:
+                    if command.handled:
                         host_logger.debug(
-                            "Event %s handled by %s",
-                            event.name,
+                            "Command %s handled by %s",
+                            command.name,
                             module.metadata.name,
                         )
                         break
         finally:
-            self._finalize_dispatch(event, event_id, error_occurred)
+            self._finalize_dispatch(command, command_id, error_occurred)
 
-        return event
+        return command
 
-    async def handle_async(self, event: Event) -> Event:
+    async def dispatch_async(self, command: Command) -> Command:
         """
-        Async version of handle() for use with FastAPI and async modules.
+        Async version of dispatch() for use with FastAPI and async modules.
 
         Supports native async handlers without thread pool overhead.
 
         Args:
-            event: The event to dispatch
+            command: The command to dispatch
 
         Returns:
-            The event (with output set if handled)
+            The command (with output set if handled)
 
         Raises:
-            EventHandlingError: If propagate_exceptions is True and
+            CommandHandlingError: If propagate_exceptions is True and
                                a handler raises an exception.
             RateLimitExceeded: If rate limit is exceeded.
             CircuitBreakerOpen: If circuit breaker is open.
@@ -444,66 +444,66 @@ class ModuleHost:
             except RateLimitExceeded:
                 if self._metrics:
                     self._metrics.events_rate_limited += 1
-                host_logger.warning("Rate limit exceeded for event %s", event.name)
+                host_logger.warning("Rate limit exceeded for command %s", command.name)
                 raise
 
         # Check circuit breaker
-        self._check_circuit_breaker(event)
+        self._check_circuit_breaker(command)
 
         # Common setup
-        event_id = self._prepare_dispatch(event)
+        command_id = self._prepare_dispatch(command)
 
-        host_logger.debug("Dispatching event async: %s (id=%s)", event.name, event_id)
+        host_logger.debug("Dispatching command async: %s (id=%s)", command.name, command_id)
 
         error_occurred = None
 
         try:
             for module in self._modules:
-                if module.can_handle(event):
+                if module.can_handle(command):
                     host_logger.debug(
-                        "Module %s handling event %s (async)",
+                        "Module %s handling command %s (async)",
                         module.metadata.name,
-                        event.name,
+                        command.name,
                     )
                     try:
-                        await self._handle_with_retry_async(event, module)
+                        await self._handle_with_retry_async(command, module)
                     except Exception as e:
                         error_occurred = e
-                        self._handle_dispatch_error(event, module, e)
+                        self._handle_dispatch_error(command, module, e)
 
                         if self._config.propagate_exceptions:
-                            raise EventHandlingError(
+                            raise CommandHandlingError(
                                 f"Handler error in {module.metadata.name}",
-                                event=event,
+                                command=command,
                                 module=module,
                                 original_error=e,
                             ) from e
                         break
 
-                    if event.handled:
+                    if command.handled:
                         host_logger.debug(
-                            "Event %s handled by %s (async)",
-                            event.name,
+                            "Command %s handled by %s (async)",
+                            command.name,
                             module.metadata.name,
                         )
                         break
         finally:
-            self._finalize_dispatch(event, event_id, error_occurred)
+            self._finalize_dispatch(command, command_id, error_occurred)
 
-        return event
+        return command
 
     async def _handle_with_retry_async(
-        self, event: Event, module: Module, attempt: int = 0
+        self, command: Command, module: Module, attempt: int = 0
     ) -> bool:
-        """Handle event with retry logic (async version)."""
+        """Handle command with retry logic (async version)."""
         try:
             # Check if handler is async
             if inspect.iscoroutinefunction(module.handle):
-                await module.handle(event)
+                await module.handle(command)
             else:
                 # Run sync handler in thread pool
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(self._executor, module.handle, event)
+                await loop.run_in_executor(self._executor, module.handle, command)
 
             # Record success with circuit breaker
             if self._config.circuit_breaker:
@@ -523,14 +523,14 @@ class ModuleHost:
 
                 delay = self._config.retry_policy.calculate_delay(attempt)
                 host_logger.warning(
-                    "Retrying event %s (attempt %d) after %.2fs: %s",
-                    event.name,
+                    "Retrying command %s (attempt %d) after %.2fs: %s",
+                    command.name,
                     attempt + 1,
                     delay,
                     e,
                 )
                 await asyncio.sleep(delay)
-                return await self._handle_with_retry_async(event, module, attempt + 1)
+                return await self._handle_with_retry_async(command, module, attempt + 1)
 
             # No more retries, raise
             raise

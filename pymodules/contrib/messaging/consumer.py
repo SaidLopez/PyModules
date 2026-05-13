@@ -1,7 +1,8 @@
 """
 EventConsumer - Bridges message broker to ModuleHost.
 
-Consumes messages from a broker and dispatches them as events to the ModuleHost.
+Consumes Events from a broker (the cross-process broadcast notification) and
+dispatches them through the host as commands, wrapped in ``ExternalEvent``.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from ...interfaces import Event, EventInput, EventOutput
+from ...interfaces import Command, CommandRequest, CommandResponse
 from ...logging import get_logger
 from .broker import ConsumeError, Message, MessageBroker
 
@@ -21,13 +22,13 @@ logger = get_logger("messaging.consumer")
 
 
 # =============================================================================
-# Event Input/Output for External Messages
+# Command Input/Output for External Broker Events
 # =============================================================================
 
 
 @dataclass
-class ExternalEventInput(EventInput):
-    """Input for events received from external message broker."""
+class ExternalEventInput(CommandRequest):
+    """Request payload for an Event received from an external message broker."""
 
     data: dict[str, Any] = field(default_factory=dict)
     headers: dict[str, str] = field(default_factory=dict)
@@ -36,16 +37,16 @@ class ExternalEventInput(EventInput):
 
 
 @dataclass
-class ExternalEventOutput(EventOutput):
-    """Output for externally-triggered events."""
+class ExternalEventOutput(CommandResponse):
+    """Response payload for an externally-triggered Event."""
 
     result: dict[str, Any] = field(default_factory=dict)
     success: bool = True
     error: str | None = None
 
 
-class ExternalEvent(Event[ExternalEventInput, ExternalEventOutput]):
-    """Event created from an external message."""
+class ExternalEvent(Command[ExternalEventInput, ExternalEventOutput]):
+    """In-process wrapper for an Event received from an external broker."""
 
     pass
 
@@ -105,15 +106,15 @@ class EventConsumerConfig:
 
 class EventConsumer:
     """
-    Consumes messages from a broker and dispatches them to ModuleHost.
+    Consumes Events from a broker and dispatches them as commands to ModuleHost.
 
-    Bridges external message queues with the PyModules event system, allowing
-    modules to handle events from distributed sources.
+    Bridges external message queues with the PyModules dispatch system, allowing
+    modules to handle broker Events from distributed sources.
 
     Example:
         broker = RedisBroker(config)
         host = ModuleHost()
-        host.register(MyEventHandler())
+        host.register(MyHandler())
 
         consumer = EventConsumer(
             broker=broker,
@@ -135,11 +136,11 @@ class EventConsumer:
         config: EventConsumerConfig | None = None,
     ):
         """
-        Initialize the event consumer.
+        Initialize the consumer.
 
         Args:
             broker: Message broker to consume from.
-            host: ModuleHost to dispatch events to.
+            host: ModuleHost to dispatch commands to.
             config: Consumer configuration.
         """
         self.broker = broker
@@ -255,32 +256,32 @@ class EventConsumer:
             self._semaphore.release()
 
     async def _handle_message(self, message: Message) -> None:
-        """Handle a single message by dispatching it as an event."""
+        """Handle a single broker message by dispatching it as a command."""
         try:
-            # Create event from message
-            event = self._create_event(message)
+            # Build command wrapper from broker message
+            command = self._build_command(message)
 
-            if event is None:
+            if command is None:
                 logger.warning(
-                    "Could not create event from message %s (no event_name and create_events=False)",
+                    "Could not build command from message %s (no event_name and create_events=False)",
                     message.id,
                 )
                 if self.config.auto_ack:
                     await self.broker.ack(message)
                 return
 
-            # Dispatch to host
-            logger.debug("Dispatching event %s from message %s", event.name, message.id)
+            # Dispatch through host
+            logger.debug("Dispatching %s from message %s", command.name, message.id)
 
-            # Use async handler
-            await self.host.handle_async(event)
+            # Use async dispatch
+            await self.host.dispatch_async(command)
 
-            if event.handled:
-                logger.debug("Event %s handled successfully", event.name)
+            if command.handled:
+                logger.debug("Command %s handled successfully", command.name)
                 if self.config.auto_ack:
                     await self.broker.ack(message)
             else:
-                logger.warning("Event %s was not handled by any module", event.name)
+                logger.warning("Command %s was not handled by any module", command.name)
                 if self.config.auto_ack:
                     # Still ack - no handler is not an error
                     await self.broker.ack(message)
@@ -289,9 +290,9 @@ class EventConsumer:
             logger.error("Error handling message %s: %s", message.id, e)
             await self.broker.nack(message, requeue=True)
 
-    def _create_event(self, message: Message) -> Event[Any, Any] | None:
-        """Create a PyModules Event from a broker Message."""
-        # Determine event name
+    def _build_command(self, message: Message) -> Command[Any, Any] | None:
+        """Build an in-process Command wrapping a broker Message."""
+        # Determine the broker event name carried on the message
         event_name = message.event_name
 
         # Check stream-to-event mapping
@@ -311,28 +312,28 @@ class EventConsumer:
         if not event_name and not self.config.create_events:
             return None
 
-        # Create external event with message data
-        event_input = ExternalEventInput(
+        # Build the in-process Command with broker-message data
+        request = ExternalEventInput(
             data=message.data,
             headers=message.headers,
             source_stream=message.stream,
             message_id=message.id,
         )
 
-        event = ExternalEvent(
+        command = ExternalEvent(
             name=event_name,
-            input=event_input,
+            input=request,
         )
 
         # Copy trace context from headers
         if "trace_id" in message.headers:
-            event.meta["trace_id"] = message.headers["trace_id"]
+            command.meta["trace_id"] = message.headers["trace_id"]
         if "span_id" in message.headers:
-            event.meta["span_id"] = message.headers["span_id"]
+            command.meta["span_id"] = message.headers["span_id"]
         if "correlation_id" in message.headers:
-            event.meta["correlation_id"] = message.headers["correlation_id"]
+            command.meta["correlation_id"] = message.headers["correlation_id"]
 
-        return event
+        return command
 
     # -------------------------------------------------------------------------
     # Utility Methods
