@@ -1,0 +1,16 @@
+# Typed `CommandContext` replaces `Command.meta`
+
+`Command.meta: dict[str, Any]` was the last untyped surface on the dispatch primitive. It carried trace/observability data (`trace_id`, `correlation_id`, `parent_span_id`) as string keys, with no contract on which keys exist and no help from mypy when a typo silently writes to a new key. The same string keys appeared in `pymodules/tracing.py`, `pymodules/contrib/messaging/consumer.py`, the persistent DLQ serializer, and the test suite — each duplicating the names with no single source of truth. This is the same smell ADR-0005 addressed for `command_id`: load-bearing fields belong as typed attributes, not as string keys in a god-bag.
+
+We replaced `meta: dict[str, Any]` with `context: CommandContext`, a dataclass holding `trace_id`, `correlation_id`, `parent_span_id` as typed `str | None` fields plus an `extra: dict[str, Any]` escape hatch. `inject_trace_context` and `extract_trace_context` now read and write the typed fields. The broker consumer maps the upstream `span_id` header onto `parent_span_id` — the producer's span is, by definition, the parent of any span the consumer opens. The persistent DLQ serializer emits the typed shape (`{"context": {"trace_id": …, "extra": …}}`) instead of a single `meta` dict.
+
+The dataclass is intentionally **not frozen**: `inject_trace_context` mutates it in place, exactly as it mutated the dict before. Mutability is a property of the value's role (a scratchpad threaded through middleware), not a defect to be removed.
+
+`extra: dict[str, Any]` is the deliberate escape hatch. Genuinely ad-hoc keys that user code wants to thread through dispatch live there. The rule, same as ADR-0005, is: if a key has a stable contract and load-bearing semantics, promote it to a typed field; if it's caller-private opaque metadata, `extra` is fine.
+
+## Consequences
+
+- This is a hard rename, no `meta` alias. Per ADR-0004 and the post-1.0 stance in commits `a1ade0b` and `a436557`, the project does no transitional sugar — a `meta` property shim would have to define what it returns when the typed fields are set vs unset, and any answer is a lie. User code that read `cmd.meta["trace_id"]` rewrites to `cmd.context.trace_id`; user code that wrote arbitrary keys rewrites to `cmd.context.extra[...]`.
+- The wire format for the persistent DLQ changed: serialized entries now carry `{"command": {"context": {...}}}` rather than `{"command": {"meta": {...}}}`. Entries serialized by the previous version cannot be read by the new code. No production DLQ corpus is known to exist; if one did, a one-time migration script is the answer, not a permanent shim in `deserialize_entry`.
+- The `extra` field is still a typed-`Any` dict — mypy gives no extra safety to its contents. It exists for caller-private data we don't want to enumerate. Promoting frequently-used `extra` keys to first-class fields is a follow-up; in this commit, only the three already-load-bearing keys (`trace_id`, `correlation_id`, `parent_span_id`) became fields, because they're the only keys the framework itself reads.
+- `CommandContext` is now part of the public surface via `pymodules.CommandContext`. New typed observability data added by future middleware should grow this dataclass, not be stuffed into `extra` for convenience.

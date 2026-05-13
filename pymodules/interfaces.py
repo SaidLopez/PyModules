@@ -43,6 +43,37 @@ class CommandResponse:
     pass
 
 
+@dataclass
+class CommandContext:
+    """
+    Cross-cutting context carried alongside a Command.
+
+    Holds the typed observability fields that middleware reads and writes
+    (trace_id, correlation_id, parent_span_id) plus an ``extra`` dict as the
+    escape hatch for genuinely ad-hoc keys that user code wants to pass
+    through dispatch. Most keys should become typed fields here; ``extra``
+    exists for cases that don't yet warrant a field of their own.
+
+    Attributes:
+        trace_id: Distributed-trace identifier; set by ``TracingMiddleware``
+            from the current ``TraceContext`` (or by an inbound broker
+            consumer copying the upstream header).
+        correlation_id: End-to-end correlation identifier for logs and
+            cross-service joins. Generated when no trace is active.
+        parent_span_id: Span id of the caller that produced this dispatch.
+            Used by exporters to stitch the in-process span into its parent.
+        extra: Untyped escape hatch for ad-hoc keys (e.g., a span_id copied
+            verbatim from a broker message header for round-trip
+            preservation). Prefer adding a typed field if the key has a
+            stable contract.
+    """
+
+    trace_id: str | None = None
+    correlation_id: str | None = None
+    parent_span_id: str | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
 # Type variables for generic Command. ``Req`` is the request payload type
 # carried into the handler; ``Resp`` is the response type the handler returns
 # (propagated to ``ModuleHost.dispatch``'s return annotation).
@@ -62,7 +93,11 @@ class Command(Generic[Req, Resp]):
     Attributes:
         name: Unique identifier for this command type (e.g., "com.example.greet").
         request: Request data passed to the handler.
-        meta: Additional metadata that can be passed between Modules.
+        context: Cross-cutting ``CommandContext`` (trace_id, correlation_id,
+            parent_span_id, plus an ``extra`` dict). Replaces the old
+            untyped ``meta: dict[str, Any]`` god-bag; observability
+            middleware reads and writes typed fields rather than string
+            keys.
         command_id: Optional caller-supplied identifier for idempotency.
             When set, ``IdempotencyMiddleware`` (if present) caches the
             response under this key and returns the cached value on a
@@ -88,7 +123,7 @@ class Command(Generic[Req, Resp]):
 
     name: str = ""
     request: Req | None = None
-    meta: dict[str, Any] = field(default_factory=dict)
+    context: CommandContext = field(default_factory=CommandContext)
     command_id: str | None = None
 
     def __post_init__(self) -> None:
@@ -119,8 +154,11 @@ class Event:
     Attributes:
         name: Logical event name, useful for logging/observability. May be
             set as a class attribute on the subclass.
-        meta: Free-form metadata dictionary, mirroring ``Command.meta``.
-            Will migrate to ``CommandContext`` once that primitive lands.
+        context: Cross-cutting ``CommandContext`` (trace_id, correlation_id,
+            parent_span_id, plus an ``extra`` dict), mirroring
+            ``Command.context``. Lets a publisher propagate the active
+            trace into the events it emits so subscribers can stitch their
+            spans onto the originating request.
 
     Example:
         @dataclass
@@ -131,7 +169,7 @@ class Event:
     """
 
     name: str = ""
-    meta: dict[str, Any] = field(default_factory=dict)
+    context: CommandContext = field(default_factory=CommandContext)
 
     def __post_init__(self) -> None:
         # Allow subclasses to define name as a class attribute, mirroring Command.

@@ -74,11 +74,17 @@ class PersistentDLQConfig:
 
 def serialize_entry(entry: DeadLetterEntry) -> dict[str, Any]:
     """Serialize a DeadLetterEntry to a dictionary."""
+    ctx = entry.command.context
     return {
         "command": {
             "name": entry.command.name,
             "request": entry.command.request.__dict__ if entry.command.request else None,
-            "meta": entry.command.meta,
+            "context": {
+                "trace_id": ctx.trace_id,
+                "correlation_id": ctx.correlation_id,
+                "parent_span_id": ctx.parent_span_id,
+                "extra": ctx.extra,
+            },
         },
         "error": str(entry.error),
         "error_type": type(entry.error).__name__,
@@ -90,7 +96,7 @@ def serialize_entry(entry: DeadLetterEntry) -> dict[str, Any]:
 
 def deserialize_entry(data: dict[str, Any]) -> DeadLetterEntry:
     """Deserialize a dictionary to a DeadLetterEntry."""
-    from ...interfaces import Command, CommandRequest
+    from ...interfaces import Command, CommandContext, CommandRequest
 
     command_data = data["command"]
 
@@ -103,10 +109,18 @@ def deserialize_entry(data: dict[str, Any]) -> DeadLetterEntry:
         for k, v in request_data.items():
             setattr(request_obj, k, v)
 
+    ctx_data = command_data.get("context") or {}
+    context = CommandContext(
+        trace_id=ctx_data.get("trace_id"),
+        correlation_id=ctx_data.get("correlation_id"),
+        parent_span_id=ctx_data.get("parent_span_id"),
+        extra=ctx_data.get("extra") or {},
+    )
+
     command = Command(
         name=command_data["name"],
         request=request_obj,
-        meta=command_data.get("meta", {}),
+        context=context,
     )
 
     return DeadLetterEntry(

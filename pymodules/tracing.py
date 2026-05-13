@@ -258,26 +258,26 @@ def get_correlation_id() -> str | None:
 
 
 def inject_trace_context(command: "Command[Any, Any]") -> None:
-    """Inject the current trace context into ``command.meta``."""
+    """Inject the current trace context into ``command.context``."""
     ctx = get_current_trace()
     if ctx:
-        command.meta["trace_id"] = ctx.trace_id
-        command.meta["correlation_id"] = ctx.correlation_id
+        command.context.trace_id = ctx.trace_id
+        command.context.correlation_id = ctx.correlation_id
         if ctx.current_span:
-            command.meta["parent_span_id"] = ctx.current_span.span_id
+            command.context.parent_span_id = ctx.current_span.span_id
     else:
-        if "correlation_id" not in command.meta:
-            command.meta["correlation_id"] = generate_id()
+        if command.context.correlation_id is None:
+            command.context.correlation_id = generate_id()
 
 
 def extract_trace_context(
     command: "Command[Any, Any]",
 ) -> tuple[str | None, str | None, str | None]:
-    """Pull ``(trace_id, correlation_id, parent_span_id)`` from ``command.meta``."""
+    """Pull ``(trace_id, correlation_id, parent_span_id)`` from ``command.context``."""
     return (
-        command.meta.get("trace_id"),
-        command.meta.get("correlation_id"),
-        command.meta.get("parent_span_id"),
+        command.context.trace_id,
+        command.context.correlation_id,
+        command.context.parent_span_id,
     )
 
 

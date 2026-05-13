@@ -291,15 +291,15 @@ class TestCommandTracing:
         with tracer.trace("operation", correlation_id="my-id") as ctx:
             inject_trace_context(command)
 
-        assert command.meta["trace_id"] == ctx.trace_id
-        assert command.meta["correlation_id"] == "my-id"
+        assert command.context.trace_id == ctx.trace_id
+        assert command.context.correlation_id == "my-id"
 
     def test_extract_trace_context(self):
         """Trace context can be extracted from command."""
         command = TracingCommand(request=TracingInput(value="test"))
-        command.meta["trace_id"] = "abc123"
-        command.meta["correlation_id"] = "xyz789"
-        command.meta["parent_span_id"] = "span123"
+        command.context.trace_id = "abc123"
+        command.context.correlation_id = "xyz789"
+        command.context.parent_span_id = "span123"
 
         trace_id, correlation_id, parent_span_id = extract_trace_context(command)
 
@@ -323,7 +323,7 @@ class TestHostWithTracing:
 
         # The middleware injects at least a correlation_id when no trace
         # is currently active.
-        assert "correlation_id" in command.meta
+        assert command.context.correlation_id is not None
 
     def test_tracing_disabled_no_context(self):
         """Without ``TracingMiddleware``, no trace context is injected."""
@@ -333,5 +333,5 @@ class TestHostWithTracing:
         command = TracingCommand(request=TracingInput(value="test"))
         host.dispatch(command)
 
-        assert "trace_id" not in command.meta
-        assert "correlation_id" not in command.meta
+        assert command.context.trace_id is None
+        assert command.context.correlation_id is None

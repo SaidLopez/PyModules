@@ -30,7 +30,7 @@ from .exceptions import (
     UnknownCommandError,
 )
 from .host import ModuleHost
-from .interfaces import Command, CommandRequest, CommandResponse, Event
+from .interfaces import Command, CommandContext, CommandRequest, CommandResponse, Event
 from .logging import configure_logging, get_logger
 from .middleware import Middleware, NextCall
 from .module import Module, ModuleMetadata, handles, module, subscribes
@@ -73,6 +73,7 @@ from .tracing import (
 __all__ = [
     # Core interfaces
     "Command",
+    "CommandContext",
     "CommandRequest",
     "CommandResponse",
     "Event",

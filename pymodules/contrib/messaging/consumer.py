@@ -326,13 +326,15 @@ class EventConsumer:
             request=ext_request,
         )
 
-        # Copy trace context from headers
+        # Copy trace context from headers. The upstream producer's
+        # ``span_id`` becomes our ``parent_span_id`` — any new span the
+        # consumer opens will be its child.
         if "trace_id" in message.headers:
-            command.meta["trace_id"] = message.headers["trace_id"]
+            command.context.trace_id = message.headers["trace_id"]
         if "span_id" in message.headers:
-            command.meta["span_id"] = message.headers["span_id"]
+            command.context.parent_span_id = message.headers["span_id"]
         if "correlation_id" in message.headers:
-            command.meta["correlation_id"] = message.headers["correlation_id"]
+            command.context.correlation_id = message.headers["correlation_id"]
 
         return command
 

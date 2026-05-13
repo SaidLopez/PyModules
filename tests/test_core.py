@@ -69,14 +69,35 @@ class TestCommandCreation:
         command = SampleCommand(request=SampleInput(value="test"))
         assert command.name == "test.command"
         assert command.request.value == "test"
-        assert command.meta == {}
+        # Default context is empty: typed fields are None, extra is {}
+        assert command.context.trace_id is None
+        assert command.context.correlation_id is None
+        assert command.context.parent_span_id is None
+        assert command.context.extra == {}
         # The dropped fields are gone:
         assert not hasattr(command, "output")
         assert not hasattr(command, "handled")
+        assert not hasattr(command, "meta")
 
-    def test_command_meta(self):
-        command = SampleCommand(request=SampleInput(value="test"), meta={"key": "value"})
-        assert command.meta["key"] == "value"
+    def test_command_context_extra(self):
+        from pymodules import CommandContext
+
+        ctx = CommandContext(extra={"key": "value"})
+        command = SampleCommand(request=SampleInput(value="test"), context=ctx)
+        assert command.context.extra["key"] == "value"
+
+    def test_command_context_typed_fields(self):
+        from pymodules import CommandContext
+
+        ctx = CommandContext(
+            trace_id="trace-1",
+            correlation_id="corr-1",
+            parent_span_id="span-1",
+        )
+        command = SampleCommand(request=SampleInput(value="test"), context=ctx)
+        assert command.context.trace_id == "trace-1"
+        assert command.context.correlation_id == "corr-1"
+        assert command.context.parent_span_id == "span-1"
 
 
 class TestModuleClass:

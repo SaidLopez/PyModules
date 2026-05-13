@@ -13,7 +13,7 @@ A user who wants only the dispatch core must not be forced to reason about Redis
 ## Language
 
 **Command**:
-A named request with a typed request payload and a typed response. Exactly one **Module** claims it via the type-routed registry; the **Module** returns the response. Optionally carries a caller-supplied `command_id` for idempotency: a second dispatch with the same id (while the entry remains in the idempotency store) returns the cached response without re-invoking the handler.
+A named request with a typed request payload and a typed response. Exactly one **Module** claims it via the type-routed registry; the **Module** returns the response. Carries a typed `context: CommandContext` (see entry) that middleware reads and writes for observability. Optionally carries a caller-supplied `command_id` for idempotency: a second dispatch with the same id (while the entry remains in the idempotency store) returns the cached response without re-invoking the handler.
 _Avoid_: Event, message, request (when ambiguous).
 
 **CommandRequest**:
@@ -23,6 +23,10 @@ _Avoid_: EventInput, args, params.
 **CommandResponse**:
 The typed value returned by the handler. Handlers **return** their response; they do not mutate the **Command**.
 _Avoid_: EventOutput, result, return value (when ambiguous).
+
+**CommandContext**:
+The typed cross-cutting context dataclass carried on every **Command** and **Event**: `trace_id`, `correlation_id`, `parent_span_id` (each `str | None`), plus an `extra: dict[str, Any]` escape hatch for genuinely ad-hoc keys. Replaces the previous untyped `meta: dict[str, Any]` god-bag — observability middleware reads and writes typed fields, not string keys.
+_Avoid_: meta (now removed), metadata (overloaded with `ModuleMetadata`), envelope.
 
 **Module**:
 A handler component whose methods are individually decorated with `@handles(CommandClass)` to claim **Commands**. Each decorated method takes the typed **CommandRequest** and returns the typed **CommandResponse**. Registered with a **ModuleHost**.
@@ -41,7 +45,7 @@ The act of running a **Command** through the host's middleware chain to the clai
 _Avoid_: Handle (overloaded with the module method), send, emit.
 
 **Event** (distinct from Command):
-A fire-and-forget broadcast notification. Has no return payload and no winning handler — N subscribers may receive it. Two transports: the in-process **EventBus** (core) for same-process listeners, and an external broker (contrib `messaging`) when listeners live in another process. The same `Event` subclass is used in both cases; the transport is the orthogonal axis.
+A fire-and-forget broadcast notification. Has no return payload and no winning handler — N subscribers may receive it. Carries the same `context: CommandContext` shape as a **Command** so a publisher can propagate the active trace into the events it emits. Two transports: the in-process **EventBus** (core) for same-process listeners, and an external broker (contrib `messaging`) when listeners live in another process. The same `Event` subclass is used in both cases; the transport is the orthogonal axis.
 _Avoid_: Command, message (when ambiguous).
 
 **EventBus**:

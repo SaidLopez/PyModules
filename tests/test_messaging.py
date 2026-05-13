@@ -535,8 +535,10 @@ class TestMessagingIntegration:
 
         await consumer.process_once(timeout=1.0)
 
-        # Verify trace context in command meta
+        # Verify trace context on the typed CommandContext. The upstream
+        # ``span_id`` header maps onto ``parent_span_id`` because any span
+        # the consumer opens will be its child.
         cmd = handler.handled_commands[0]
-        assert cmd.meta.get("trace_id") == "trace-123"
-        assert cmd.meta.get("span_id") == "span-456"
-        assert cmd.meta.get("correlation_id") == "corr-789"
+        assert cmd.context.trace_id == "trace-123"
+        assert cmd.context.parent_span_id == "span-456"
+        assert cmd.context.correlation_id == "corr-789"
