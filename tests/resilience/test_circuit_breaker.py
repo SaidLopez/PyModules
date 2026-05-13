@@ -136,3 +136,20 @@ class TestCircuitBreakerMiddleware:
         breaker = CircuitBreaker(failure_threshold=1)
         mw = CircuitBreakerMiddleware(breaker)
         assert mw.breaker is breaker
+
+
+class TestBreakerIgnoresFrameworkSignals:
+    """Framework signals must not count as downstream failures."""
+
+    def test_unknown_command_does_not_trip_breaker(self):
+        from pymodules import UnknownCommandError
+
+        breaker = CircuitBreaker(failure_threshold=1)
+        mw = CircuitBreakerMiddleware(breaker)
+        host = ModuleHost(config=ModuleHostConfig(middleware=[mw]))
+        # No module registered — terminal raises UnknownCommandError.
+        with pytest.raises(UnknownCommandError):
+            host.dispatch(CBCommand(request=CBInput()))
+        # Critically: breaker remains CLOSED. A misrouted dispatch isn't a
+        # service-health signal.
+        assert breaker.state is CircuitState.CLOSED

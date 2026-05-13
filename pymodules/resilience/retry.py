@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any
 
+from ..exceptions import PyModulesSignal
 from ..interfaces import Command
 from ..logging import get_logger
 from ..middleware import NextCall
@@ -43,6 +44,15 @@ class RetryPolicy:
         return min(delay, self.max_delay)
 
     def should_retry(self, exception: Exception, attempt: int) -> bool:
+        # Framework signals (CircuitBreakerOpen, RateLimitExceeded,
+        # UnknownCommandError, ...) are control-flow markers, not service
+        # failures — retrying them re-runs whatever produced the signal
+        # (a misrouted dispatch, a rate-limit decision, an open breaker)
+        # and is never the right move. This exclusion is hard-coded
+        # regardless of ``retryable_exceptions`` because every signal
+        # subclasses ``Exception`` and would otherwise match the default.
+        if isinstance(exception, PyModulesSignal):
+            return False
         if attempt >= self.max_retries:
             return False
         return isinstance(exception, self.retryable_exceptions)

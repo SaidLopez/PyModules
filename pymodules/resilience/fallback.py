@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any
 
+from ..exceptions import PyModulesSignal
 from ..interfaces import Command
 from ..logging import get_logger
 from ..middleware import NextCall
@@ -43,6 +44,8 @@ class Fallback:
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 return func(*args, **kwargs)
+            except PyModulesSignal:
+                raise
             except self.exceptions as e:
                 if self.log_errors:
                     resilience_logger.warning("Fallback triggered for %s: %s", func.__name__, e)
@@ -52,6 +55,8 @@ class Fallback:
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 return await func(*args, **kwargs)
+            except PyModulesSignal:
+                raise
             except self.exceptions as e:
                 if self.log_errors:
                     resilience_logger.warning("Fallback triggered for %s: %s", func.__name__, e)
@@ -91,6 +96,13 @@ class FallbackMiddleware:
     async def __call__(self, command: Command[Any, Any], next_call: NextCall) -> Any:
         try:
             return await next_call(command)
+        except PyModulesSignal:
+            # Framework signals are control-flow markers, not the
+            # downstream-failure cases a fallback is meant to mask.
+            # Substituting a fallback for ``RateLimitExceeded`` would
+            # silently defeat the rate limit; for ``UnknownCommandError``
+            # it would mask a misrouted dispatch. Propagate untouched.
+            raise
         except self.exceptions as e:
             if self.log_errors:
                 resilience_logger.warning("Fallback triggered for command %s: %s", command.name, e)

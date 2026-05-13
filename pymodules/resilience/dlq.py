@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from ..exceptions import PyModulesSignal
 from ..interfaces import Command
 from ..logging import get_logger
 from ..middleware import NextCall
@@ -168,6 +169,13 @@ class DLQMiddleware:
     async def __call__(self, command: Command[Any, Any], next_call: NextCall) -> Any:
         try:
             return await next_call(command)
+        except PyModulesSignal:
+            # Framework signals aren't dead-letter material. A rate-limit
+            # rejection isn't a failed message — the message hasn't been
+            # attempted yet. An UnknownCommandError won't be re-runnable
+            # by replaying the queue (the missing module would need to be
+            # registered first, then the caller can re-dispatch).
+            raise
         except Exception as e:
             self.queue.add(command=command, error=e)
             self.dead_lettered_count += 1

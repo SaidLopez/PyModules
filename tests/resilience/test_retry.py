@@ -107,3 +107,28 @@ class TestRetryMiddleware:
         # 1 initial attempt + 2 retries = 3 calls
         assert mod.call_count == 3
         assert mw.retry_count == 2
+
+
+class TestRetryRespectsFrameworkSignals:
+    """``PyModulesSignal`` subclasses must NOT be retried."""
+
+    def test_should_retry_returns_false_for_signal(self):
+        from pymodules import CircuitBreakerOpen, RateLimitExceeded, UnknownCommandError
+
+        policy = RetryPolicy(max_retries=5)  # retryable_exceptions defaults to (Exception,)
+        assert policy.should_retry(CircuitBreakerOpen("open"), 0) is False
+        assert policy.should_retry(RateLimitExceeded("rl"), 0) is False
+        assert policy.should_retry(UnknownCommandError(RetryCommand), 0) is False
+        # Sanity: real handler errors still retry.
+        assert policy.should_retry(ValueError("boom"), 0) is True
+
+    def test_middleware_does_not_retry_unknown_command(self):
+        from pymodules import UnknownCommandError
+
+        mw = RetryMiddleware(RetryPolicy(max_retries=5, base_delay=0.01))
+        host = ModuleHost(config=ModuleHostConfig(middleware=[mw]))
+        # No module registered — terminal raises UnknownCommandError.
+        with pytest.raises(UnknownCommandError):
+            host.dispatch(RetryCommand(request=RetryInput(should_fail=False)))
+        # Critically: no retries.
+        assert mw.retry_count == 0

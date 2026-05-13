@@ -133,6 +133,8 @@ class CircuitBreaker:
                 result = func(*args, **kwargs)
                 self.record_success()
                 return result
+            except PyModulesSignal:
+                raise
             except Exception:
                 self.record_failure()
                 raise
@@ -147,6 +149,8 @@ class CircuitBreaker:
                 result = await func(*args, **kwargs)
                 self.record_success()
                 return result
+            except PyModulesSignal:
+                raise
             except Exception:
                 self.record_failure()
                 raise
@@ -186,6 +190,13 @@ class CircuitBreakerMiddleware:
             raise CircuitBreakerOpen("Circuit breaker is open")
         try:
             result = await next_call(command)
+        except PyModulesSignal:
+            # Framework signals are not downstream-service failures —
+            # ``UnknownCommandError`` is a programming mistake, a nested
+            # ``CircuitBreakerOpen`` is some other breaker's decision.
+            # Neither indicates this breaker's protected service is
+            # unhealthy. Propagate without touching breaker state.
+            raise
         except Exception:
             self.breaker.record_failure()
             raise

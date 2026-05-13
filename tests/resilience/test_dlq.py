@@ -4,6 +4,8 @@ Tests for ``DeadLetterQueue`` and ``DLQMiddleware``.
 
 from dataclasses import dataclass
 
+import pytest
+
 from pymodules import (
     Command,
     CommandRequest,
@@ -108,3 +110,19 @@ class TestDLQMiddleware:
 
         assert len(dlq) == 1
         assert mw.dead_lettered_count == 1
+
+
+class TestDLQIgnoresFrameworkSignals:
+    """Framework signals must not be dead-lettered."""
+
+    def test_unknown_command_does_not_enqueue(self):
+        from pymodules import UnknownCommandError
+
+        queue = DeadLetterQueue(max_size=10)
+        mw = DLQMiddleware(queue)
+        host = ModuleHost(config=ModuleHostConfig(middleware=[mw]))
+        # No module registered — terminal raises UnknownCommandError.
+        with pytest.raises(UnknownCommandError):
+            host.dispatch(DLQCommand(request=DLQInput()))
+        assert mw.dead_lettered_count == 0
+        assert len(queue) == 0

@@ -103,3 +103,17 @@ class TestFallbackMiddleware:
         response = host.dispatch(FBCommand(request=FBInput(should_fail=True)))
         assert response.result == "fallback"
         assert mw.fallback_count == 1
+
+
+class TestFallbackIgnoresFrameworkSignals:
+    """Framework signals must propagate, not be masked by a fallback."""
+
+    def test_unknown_command_propagates_through_fallback(self):
+        from pymodules import UnknownCommandError
+
+        mw = FallbackMiddleware(default_value=FBOutput(result="fallback"))
+        host = ModuleHost(config=ModuleHostConfig(middleware=[mw]))
+        # No module registered — terminal raises UnknownCommandError.
+        with pytest.raises(UnknownCommandError):
+            host.dispatch(FBCommand(request=FBInput()))
+        assert mw.fallback_count == 0
