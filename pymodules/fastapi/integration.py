@@ -281,42 +281,21 @@ class PyModulesAPI:
         @app.get(path, tags=tags, summary="Get metrics")
         async def metrics() -> dict[str, Any]:
             """
-            Get current metrics from the ModuleHost.
+            Return host uptime / version / module info.
 
-            Returns command processing statistics including dispatched,
-            handled, failed, retried, and rate-limited counts.
+            Metrics counters now live on individual middleware instances
+            (e.g. ``MetricsMiddleware.dispatched``). Callers wanting those
+            should hold a reference to the relevant middleware directly.
             """
             result: dict[str, Any] = {
                 "uptime_seconds": time.time() - self._start_time,
                 "version": self.version,
+                "modules": {
+                    "count": len(self.host.modules),
+                    "names": [m.metadata.name for m in self.host.modules],
+                },
+                "middleware_count": len(self.host.config.middleware),
             }
-
-            if self.host.metrics:
-                result["metrics"] = self.host.metrics.to_dict()
-            else:
-                result["metrics"] = {"metrics_enabled": False}
-
-            # Add module info
-            result["modules"] = {
-                "count": len(self.host.modules),
-                "names": [m.metadata.name for m in self.host.modules],
-            }
-
-            # Add resilience status if configured
-            config = self.host.config
-            result["resilience"] = {
-                "rate_limiter": config.rate_limiter is not None,
-                "circuit_breaker": config.circuit_breaker is not None,
-                "retry_policy": config.retry_policy is not None,
-                "dead_letter_queue": config.dead_letter_queue is not None,
-            }
-
-            if config.circuit_breaker:
-                result["circuit_breaker_state"] = config.circuit_breaker.state.value
-
-            if config.dead_letter_queue is not None:
-                result["dlq_size"] = len(config.dead_letter_queue)
-
             return result
 
     def add_tracing_middleware(self, app: "FastAPI") -> None:

@@ -136,16 +136,26 @@ class HealthCheck:
 
         try:
             modules = len(self._host.modules)
-            commands_in_progress = len(self._host.commands_in_progress)
 
             details: dict[str, Any] = {
                 "modules_registered": modules,
-                "commands_in_progress": commands_in_progress,
+                "middleware_count": len(self._host.config.middleware),
             }
 
-            # Add metrics if available
-            if self._host.metrics:
-                details["metrics"] = self._host.metrics.to_dict()
+            # Aggregate counters from any MetricsMiddleware in the chain.
+            from ..tracing import MetricsMiddleware
+
+            metrics_mws = [
+                mw for mw in self._host.config.middleware if isinstance(mw, MetricsMiddleware)
+            ]
+            if metrics_mws:
+                mw = metrics_mws[0]
+                details["metrics"] = {
+                    "dispatched": mw.dispatched,
+                    "succeeded": mw.succeeded,
+                    "failed": mw.failed,
+                    "unmatched": mw.unmatched,
+                }
 
             # Check for concerning states
             if modules == 0:

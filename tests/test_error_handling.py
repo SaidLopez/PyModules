@@ -81,13 +81,13 @@ class TestErrorPropagation:
         assert result is None
 
     def test_on_error_callback(self):
-        """Test that on_error callback is called on exceptions."""
+        """``LifecycleMiddleware.on_error`` fires on handler exceptions."""
+        from pymodules import LifecycleMiddleware
+
         errors = []
+        lifecycle = LifecycleMiddleware(on_error=lambda e, c: errors.append((e, c)))
 
-        def error_handler(error, command):
-            errors.append((error, command))
-
-        config = ModuleHostConfig(propagate_exceptions=False, on_error=error_handler)
+        config = ModuleHostConfig(propagate_exceptions=False, middleware=[lifecycle])
         host = ModuleHost(config=config)
         host.register(ErrorModule())
 

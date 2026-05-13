@@ -271,11 +271,12 @@ class TestCreateCallableCheck:
 
 
 class TestHealthCheckWithMetrics:
-    """Tests for health check with metrics."""
+    """Health check pulls counters from ``MetricsMiddleware`` if present."""
 
     def test_metrics_in_health_details(self):
-        """Metrics are included in health check details."""
-        config = ModuleHostConfig(enable_metrics=True)
+        from pymodules import MetricsMiddleware
+
+        config = ModuleHostConfig(middleware=[MetricsMiddleware()])
         host = ModuleHost(config=config)
         host.register(HealthModule())
 

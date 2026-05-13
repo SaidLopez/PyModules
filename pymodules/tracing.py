@@ -1,10 +1,13 @@
 """
 Distributed tracing support for PyModules framework.
 
-Provides correlation IDs, span tracking, and optional OpenTelemetry integration.
+Provides correlation IDs, span tracking, and observability middleware.
+The OpenTelemetry exporter is in ``pymodules.contrib.tracing.opentelemetry``;
+core tracing never imports OTel.
 """
 
 import contextvars
+import os
 import threading
 import time
 import uuid
@@ -13,10 +16,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from .logging import get_logger
+from .middleware import NextCall
+
 if TYPE_CHECKING:
     from .interfaces import Command
-
-from .logging import get_logger
+    from .middleware import Middleware
 
 tracing_logger = get_logger("tracing")
 
@@ -33,20 +38,7 @@ def generate_id() -> str:
 
 @dataclass
 class Span:
-    """
-    A span represents a unit of work in a trace.
-
-    Attributes:
-        span_id: Unique identifier for this span.
-        name: Name of the operation.
-        trace_id: ID of the parent trace.
-        parent_span_id: ID of the parent span (if any).
-        start_time: When the span started.
-        end_time: When the span ended.
-        attributes: Additional attributes/tags.
-        status: Status of the span (ok, error).
-        events: List of events that occurred during the span.
-    """
+    """A span represents a unit of work in a trace."""
 
     span_id: str = field(default_factory=generate_id)
     name: str = ""
@@ -59,12 +51,10 @@ class Span:
     events: list[dict[str, Any]] = field(default_factory=list)
 
     def end(self, status: str = "ok") -> None:
-        """End the span."""
         self.end_time = time.time()
         self.status = status
 
     def add_event(self, name: str, attributes: dict[str, Any] | None = None) -> None:
-        """Add an event to the span."""
         self.events.append(
             {
                 "name": name,
@@ -74,18 +64,15 @@ class Span:
         )
 
     def set_attribute(self, key: str, value: Any) -> None:
-        """Set an attribute on the span."""
         self.attributes[key] = value
 
     @property
     def duration_ms(self) -> float | None:
-        """Get span duration in milliseconds."""
         if self.end_time is None:
             return None
         return (self.end_time - self.start_time) * 1000
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert span to dictionary for serialization."""
         return {
             "span_id": self.span_id,
             "trace_id": self.trace_id,
@@ -116,11 +103,9 @@ class TraceContext:
 
     @property
     def current_span(self) -> Span | None:
-        """Get the current active span."""
         return self._span_stack[-1] if self._span_stack else None
 
     def start_span(self, name: str, attributes: dict[str, Any] | None = None) -> Span:
-        """Start a new span."""
         parent_span = self.current_span
         span = Span(
             name=name,
@@ -133,7 +118,6 @@ class TraceContext:
         return span
 
     def end_span(self, status: str = "ok") -> Span | None:
-        """End the current span."""
         if self._span_stack:
             span = self._span_stack.pop()
             span.end(status)
@@ -144,7 +128,6 @@ class TraceContext:
     def span(
         self, name: str, attributes: dict[str, Any] | None = None
     ) -> Generator[Span, None, None]:
-        """Context manager for creating a span."""
         span = self.start_span(name, attributes)
         try:
             yield span
@@ -157,7 +140,6 @@ class TraceContext:
             self.end_span("ok")
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert trace to dictionary for serialization."""
         return {
             "trace_id": self.trace_id,
             "correlation_id": self.correlation_id,
@@ -167,34 +149,13 @@ class TraceContext:
 
 
 class Tracer:
-    """
-    Tracer for creating and managing traces.
-
-    Example:
-        tracer = Tracer()
-
-        with tracer.trace("process_order") as ctx:
-            with ctx.span("validate_order"):
-                validate(order)
-            with ctx.span("save_order"):
-                save(order)
-
-        # Access trace data
-        print(tracer.get_trace(ctx.trace_id))
-    """
+    """Tracer for creating and managing traces."""
 
     def __init__(
         self,
         service_name: str = "pymodules",
         export_func: Callable[[TraceContext], None] | None = None,
     ):
-        """
-        Initialize tracer.
-
-        Args:
-            service_name: Name of the service for tracing.
-            export_func: Optional function to export completed traces.
-        """
         self.service_name = service_name
         self._export_func = export_func
         self._traces: dict[str, TraceContext] = {}
@@ -207,14 +168,6 @@ class Tracer:
         correlation_id: str | None = None,
         attributes: dict[str, Any] | None = None,
     ) -> Generator[TraceContext, None, None]:
-        """
-        Create a new trace context.
-
-        Args:
-            name: Name of the trace/root span.
-            correlation_id: Optional correlation ID (generated if not provided).
-            attributes: Optional attributes for the trace.
-        """
         ctx = TraceContext(
             correlation_id=correlation_id or generate_id(),
             attributes={
@@ -223,11 +176,9 @@ class Tracer:
             },
         )
 
-        # Store trace
         with self._lock:
             self._traces[ctx.trace_id] = ctx
 
-        # Set as current trace
         token = _current_trace.set(ctx)
 
         try:
@@ -236,7 +187,6 @@ class Tracer:
         finally:
             _current_trace.reset(token)
 
-            # Export trace if configured
             if self._export_func:
                 try:
                     self._export_func(ctx)
@@ -244,29 +194,17 @@ class Tracer:
                     tracing_logger.error("Failed to export trace: %s", e)
 
     def get_trace(self, trace_id: str) -> TraceContext | None:
-        """Get a trace by ID."""
         with self._lock:
             return self._traces.get(trace_id)
 
     def get_current_trace(self) -> TraceContext | None:
-        """Get the current trace context."""
         return _current_trace.get()
 
     def get_current_span(self) -> Span | None:
-        """Get the current span."""
         ctx = self.get_current_trace()
         return ctx.current_span if ctx else None
 
     def clear_traces(self, older_than: float | None = None) -> int:
-        """
-        Clear stored traces.
-
-        Args:
-            older_than: If provided, only clear traces older than this many seconds.
-
-        Returns:
-            Number of traces cleared.
-        """
         with self._lock:
             if older_than is None:
                 count = len(self._traces)
@@ -314,76 +252,12 @@ def get_correlation_id() -> str | None:
 
 
 # =============================================================================
-# OpenTelemetry Integration (Optional)
-# =============================================================================
-
-
-class OpenTelemetryExporter:
-    """
-    OpenTelemetry exporter for PyModules traces.
-
-    Converts PyModules traces to OpenTelemetry format.
-    Requires opentelemetry-api and opentelemetry-sdk packages.
-
-    Example:
-        from opentelemetry import trace as otel_trace
-        from opentelemetry.sdk.trace import TracerProvider
-
-        otel_trace.set_tracer_provider(TracerProvider())
-        exporter = OpenTelemetryExporter()
-
-        tracer = Tracer(export_func=exporter.export)
-    """
-
-    def __init__(self) -> None:
-        """Initialize OpenTelemetry exporter."""
-        self._otel_tracer = None
-        self._available = False
-
-        try:
-            from opentelemetry import trace as otel_trace
-
-            self._otel_trace = otel_trace
-            self._otel_tracer = otel_trace.get_tracer("pymodules")
-            self._available = True
-        except ImportError:
-            tracing_logger.debug(
-                "OpenTelemetry not available. Install with: pip install opentelemetry-api opentelemetry-sdk"
-            )
-
-    @property
-    def available(self) -> bool:
-        """Check if OpenTelemetry is available."""
-        return self._available
-
-    def export(self, ctx: TraceContext) -> None:
-        """Export a trace context to OpenTelemetry."""
-        if not self._available or not self._otel_tracer:
-            return
-
-        from opentelemetry.trace import StatusCode
-
-        for span in ctx.spans:
-            with self._otel_tracer.start_as_current_span(
-                span.name,
-                attributes=span.attributes,
-            ) as otel_span:
-                for event in span.events:
-                    otel_span.add_event(event["name"], event.get("attributes", {}))
-
-                if span.status == "error":
-                    otel_span.set_status(StatusCode.ERROR)
-                else:
-                    otel_span.set_status(StatusCode.OK)
-
-
-# =============================================================================
 # Command Tracing Utilities
 # =============================================================================
 
 
-def inject_trace_context(command: "Command") -> None:
-    """Inject current trace context into command metadata."""
+def inject_trace_context(command: "Command[Any, Any]") -> None:
+    """Inject the current trace context into ``command.meta``."""
     ctx = get_current_trace()
     if ctx:
         command.meta["trace_id"] = ctx.trace_id
@@ -391,15 +265,166 @@ def inject_trace_context(command: "Command") -> None:
         if ctx.current_span:
             command.meta["parent_span_id"] = ctx.current_span.span_id
     else:
-        # No active trace, but still inject a correlation ID for request tracking
         if "correlation_id" not in command.meta:
             command.meta["correlation_id"] = generate_id()
 
 
-def extract_trace_context(command: "Command") -> tuple[str | None, str | None, str | None]:
-    """Extract trace context from command metadata."""
+def extract_trace_context(
+    command: "Command[Any, Any]",
+) -> tuple[str | None, str | None, str | None]:
+    """Pull ``(trace_id, correlation_id, parent_span_id)`` from ``command.meta``."""
     return (
         command.meta.get("trace_id"),
         command.meta.get("correlation_id"),
         command.meta.get("parent_span_id"),
     )
+
+
+# =============================================================================
+# Observability Middleware
+# =============================================================================
+
+
+class TracingMiddleware:
+    """
+    Inject the current trace context into the command before dispatching.
+
+    Stateless apart from a counter exposed for observability.
+    """
+
+    def __init__(self) -> None:
+        self.injected_count = 0
+
+    async def __call__(self, command: "Command[Any, Any]", next_call: NextCall) -> Any:
+        inject_trace_context(command)
+        self.injected_count += 1
+        return await next_call(command)
+
+
+class MetricsMiddleware:
+    """
+    Counts dispatched / succeeded / failed / unmatched commands.
+
+    Owns its counters directly; user code holds a reference to read them.
+    The terminal middleware signals unmatched dispatches by setting
+    ``command.meta["_pymodules_unmatched"] = True`` immediately before
+    returning ``None``; this middleware uses that flag rather than
+    introspecting the dispatch table.
+
+    Attributes:
+        dispatched: Total commands seen by the middleware.
+        succeeded: Commands that returned without raising and were handled.
+        failed: Commands whose inner chain raised.
+        unmatched: Dispatches where no module claimed the Command class.
+    """
+
+    UNMATCHED_FLAG = "_pymodules_unmatched"
+
+    def __init__(self) -> None:
+        self.dispatched = 0
+        self.succeeded = 0
+        self.failed = 0
+        self.unmatched = 0
+
+    async def __call__(self, command: "Command[Any, Any]", next_call: NextCall) -> Any:
+        self.dispatched += 1
+        try:
+            result = await next_call(command)
+        except Exception:
+            self.failed += 1
+            raise
+
+        if command.meta.pop(self.UNMATCHED_FLAG, False):
+            self.unmatched += 1
+        else:
+            self.succeeded += 1
+        return result
+
+
+class LifecycleMiddleware:
+    """
+    Run optional lifecycle callbacks around dispatch.
+
+    Replaces the three ``on_event_start``/``on_event_end``/``on_error``
+    fields that used to live on ``ModuleHostConfig``.
+
+    Args:
+        on_start: Called with the command before the inner chain runs.
+        on_end: Called with ``(command, was_handled)`` after success.
+        on_error: Called with ``(error, command)`` on failure (before
+            the exception propagates).
+    """
+
+    def __init__(
+        self,
+        *,
+        on_start: Callable[["Command[Any, Any]"], None] | None = None,
+        on_end: Callable[["Command[Any, Any]", bool], None] | None = None,
+        on_error: Callable[[Exception, "Command[Any, Any]"], None] | None = None,
+    ) -> None:
+        self.on_start = on_start
+        self.on_end = on_end
+        self.on_error = on_error
+
+    async def __call__(self, command: "Command[Any, Any]", next_call: NextCall) -> Any:
+        if self.on_start is not None:
+            try:
+                self.on_start(command)
+            except Exception as e:
+                tracing_logger.warning("on_start callback failed: %s", e)
+
+        try:
+            result = await next_call(command)
+        except Exception as e:
+            if self.on_error is not None:
+                try:
+                    self.on_error(e, command)
+                except Exception as cb_e:
+                    tracing_logger.warning("on_error callback failed: %s", cb_e)
+            if self.on_end is not None:
+                try:
+                    self.on_end(command, False)
+                except Exception as cb_e:
+                    tracing_logger.warning("on_end callback failed: %s", cb_e)
+            raise
+
+        was_handled = not command.meta.get(MetricsMiddleware.UNMATCHED_FLAG, False)
+        if self.on_end is not None:
+            try:
+                self.on_end(command, was_handled)
+            except Exception as cb_e:
+                tracing_logger.warning("on_end callback failed: %s", cb_e)
+        return result
+
+
+def middleware_from_env() -> list["Middleware"]:
+    """
+    Build tracing/metrics middleware from environment variables:
+
+      - ``PYMODULES_ENABLE_TRACING=true``  → ``TracingMiddleware``
+      - ``PYMODULES_ENABLE_METRICS=true``  → ``MetricsMiddleware``
+    """
+    chain: list[Middleware] = []
+    if os.getenv("PYMODULES_ENABLE_TRACING", "false").lower() == "true":
+        chain.append(TracingMiddleware())
+    if os.getenv("PYMODULES_ENABLE_METRICS", "false").lower() == "true":
+        chain.append(MetricsMiddleware())
+    return chain
+
+
+__all__ = [
+    "LifecycleMiddleware",
+    "MetricsMiddleware",
+    "Span",
+    "TraceContext",
+    "Tracer",
+    "TracingMiddleware",
+    "extract_trace_context",
+    "generate_id",
+    "get_correlation_id",
+    "get_current_trace",
+    "get_tracer",
+    "inject_trace_context",
+    "middleware_from_env",
+    "set_tracer",
+]

@@ -187,26 +187,11 @@ class TestResourceCleanup:
         # Shutdown should complete without error
         host.shutdown(wait=True)
 
-    def test_commands_in_progress_tracking(self):
-        """Test that commands_in_progress is properly maintained."""
+    def test_host_has_no_commands_in_progress_surface(self):
+        """``commands_in_progress`` was a debug surface and is gone in 1.0.
+
+        If users need in-flight tracking they wire a dedicated middleware.
+        """
         host = ModuleHost()
-        tracking = []
-
-        @module(name="TrackingModule")
-        class TrackingModule(Module):
-            @handles(StressCommand)
-            def track(self, command: StressCommand) -> StressOutput:
-                # Check commands_in_progress during handling
-                tracking.append(len(host.commands_in_progress))
-                return StressOutput()
-
-        host.register(TrackingModule())
-
-        for i in range(10):
-            command = StressCommand(request=StressInput(value=i))
-            host.dispatch(command)
-
-        # During each handle, there should be exactly 1 command in progress
-        assert all(count == 1 for count in tracking)
-        # After all commands, should be empty
-        assert len(host.commands_in_progress) == 0
+        assert not hasattr(host, "commands_in_progress")
+        assert not hasattr(host, "_commands_in_progress")

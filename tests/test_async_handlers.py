@@ -8,12 +8,22 @@ from dataclasses import dataclass
 import pytest
 
 from pymodules import (
+    CircuitBreaker,
+    CircuitBreakerMiddleware,
+    CircuitBreakerOpen,
     Command,
     CommandRequest,
     CommandResponse,
+    LifecycleMiddleware,
+    MetricsMiddleware,
     Module,
     ModuleHost,
     ModuleHostConfig,
+    RateLimitExceeded,
+    RateLimitMiddleware,
+    RetryMiddleware,
+    RetryPolicy,
+    SyncDispatchOnAsyncHandlerError,
     handles,
     module,
 )
@@ -70,7 +80,6 @@ class TestAsyncHandlers:
 
     @pytest.mark.asyncio
     async def test_async_handler_via_dispatch_async(self):
-        """Async handlers work with dispatch_async."""
         host = ModuleHost()
         mod = AsyncModule()
         host.register(mod)
@@ -83,7 +92,6 @@ class TestAsyncHandlers:
 
     @pytest.mark.asyncio
     async def test_sync_handler_via_dispatch_async(self):
-        """Sync handlers work with dispatch_async."""
         host = ModuleHost()
         mod = SyncModule()
         host.register(mod)
@@ -95,64 +103,50 @@ class TestAsyncHandlers:
 
     @pytest.mark.asyncio
     async def test_concurrent_async_commands(self):
-        """Multiple async commands can run concurrently."""
         host = ModuleHost()
         host.register(AsyncModule())
 
-        # Create multiple commands with delays
         commands = [
             AsyncCommand(request=AsyncInput(value=f"command{i}", delay=0.01)) for i in range(5)
         ]
-
-        # Dispatch concurrently
         results = await asyncio.gather(*[host.dispatch_async(c) for c in commands])
-
         assert all(isinstance(r, AsyncOutput) for r in results)
 
     @pytest.mark.asyncio
     async def test_async_with_metrics(self):
-        """Async handlers work with metrics."""
-        config = ModuleHostConfig(enable_metrics=True)
-        host = ModuleHost(config=config)
+        metrics = MetricsMiddleware()
+        host = ModuleHost(config=ModuleHostConfig(middleware=[metrics]))
         host.register(AsyncModule())
 
-        command = AsyncCommand(request=AsyncInput(value="test"))
-        await host.dispatch_async(command)
+        await host.dispatch_async(AsyncCommand(request=AsyncInput(value="test")))
 
-        assert host.metrics.events_dispatched == 1
-        assert host.metrics.events_handled == 1
+        assert metrics.dispatched == 1
+        assert metrics.succeeded == 1
 
     @pytest.mark.asyncio
-    async def test_async_with_callbacks(self):
-        """Async handlers work with lifecycle callbacks."""
+    async def test_async_with_lifecycle_callbacks(self):
         started = []
         ended = []
-
-        config = ModuleHostConfig(
-            on_event_start=lambda c: started.append(c),
-            on_event_end=lambda c, h: ended.append((c, h)),
+        lifecycle = LifecycleMiddleware(
+            on_start=started.append,
+            on_end=lambda c, h: ended.append((c, h)),
         )
-        host = ModuleHost(config=config)
+        host = ModuleHost(config=ModuleHostConfig(middleware=[lifecycle]))
         host.register(AsyncModule())
 
-        command = AsyncCommand(request=AsyncInput(value="test"))
-        await host.dispatch_async(command)
+        await host.dispatch_async(AsyncCommand(request=AsyncInput(value="test")))
 
         assert len(started) == 1
         assert len(ended) == 1
-        # was_handled = True (a module claimed the type)
         assert ended[0][1] is True
 
-    def test_async_handler_via_sync_dispatch(self):
-        """Async handlers work with sync dispatch() too."""
+    def test_sync_dispatch_on_async_handler_raises(self):
+        """Sync dispatch() on an async handler raises — does not bridge."""
         host = ModuleHost()
-        mod = AsyncModule()
-        host.register(mod)
+        host.register(AsyncModule())
 
-        command = AsyncCommand(request=AsyncInput(value="test"))
-        response = host.dispatch(command)
-
-        assert response.result == "async: test"
+        with pytest.raises(SyncDispatchOnAsyncHandlerError):
+            host.dispatch(AsyncCommand(request=AsyncInput(value="test")))
 
 
 class TestAsyncWithResilience:
@@ -160,30 +154,24 @@ class TestAsyncWithResilience:
 
     @pytest.mark.asyncio
     async def test_async_with_rate_limiter(self):
-        """Async handlers work with rate limiter."""
-        from pymodules import RateLimiter, RateLimitExceeded
-
-        config = ModuleHostConfig(rate_limiter=RateLimiter(rate=1, burst=1, block=False))
+        config = ModuleHostConfig(
+            middleware=[RateLimitMiddleware(rate=1, burst=1, block=False)],
+        )
         host = ModuleHost(config=config)
         host.register(AsyncModule())
 
-        # First should succeed
-        command1 = AsyncCommand(request=AsyncInput(value="test1"))
-        response1 = await host.dispatch_async(command1)
-        assert response1 is not None
+        # First should succeed.
+        response = await host.dispatch_async(AsyncCommand(request=AsyncInput(value="1")))
+        assert response is not None
 
-        # Second should fail
-        command2 = AsyncCommand(request=AsyncInput(value="test2"))
         with pytest.raises(RateLimitExceeded):
-            await host.dispatch_async(command2)
+            await host.dispatch_async(AsyncCommand(request=AsyncInput(value="2")))
 
     @pytest.mark.asyncio
     async def test_async_with_circuit_breaker(self):
-        """Async handlers work with circuit breaker."""
-        from pymodules import CircuitBreaker, CircuitBreakerOpen
-
+        breaker = CircuitBreaker(failure_threshold=1)
         config = ModuleHostConfig(
-            circuit_breaker=CircuitBreaker(failure_threshold=1),
+            middleware=[CircuitBreakerMiddleware(breaker)],
             propagate_exceptions=False,
         )
         host = ModuleHost(config=config)
@@ -196,24 +184,19 @@ class TestAsyncWithResilience:
 
         host.register(FailingAsyncModule())
 
-        # Cause failure
-        command1 = AsyncCommand(request=AsyncInput(value="test1"))
-        await host.dispatch_async(command1)
+        # First call: breaker records failure → open.
+        await host.dispatch_async(AsyncCommand(request=AsyncInput(value="1")))
 
-        # Circuit should be open
-        command2 = AsyncCommand(request=AsyncInput(value="test2"))
         with pytest.raises(CircuitBreakerOpen):
-            await host.dispatch_async(command2)
+            await host.dispatch_async(AsyncCommand(request=AsyncInput(value="2")))
 
     @pytest.mark.asyncio
     async def test_async_with_retry(self):
-        """Async handlers work with retry policy."""
-        from pymodules import RetryPolicy
-
+        retry = RetryMiddleware(RetryPolicy(max_retries=2, base_delay=0.01))
+        metrics = MetricsMiddleware()
         config = ModuleHostConfig(
-            retry_policy=RetryPolicy(max_retries=2, base_delay=0.01),
+            middleware=[retry, metrics],
             propagate_exceptions=False,
-            enable_metrics=True,
         )
         host = ModuleHost(config=config)
 
@@ -231,12 +214,11 @@ class TestAsyncWithResilience:
 
         host.register(FlakyAsyncModule())
 
-        command = AsyncCommand(request=AsyncInput(value="test"))
-        response = await host.dispatch_async(command)
+        response = await host.dispatch_async(AsyncCommand(request=AsyncInput(value="test")))
 
         assert response is not None
         assert call_count == 3
-        assert host.metrics.events_retried == 2
+        assert retry.retry_count == 2
 
 
 class TestAsyncLoopReuse:
@@ -244,7 +226,6 @@ class TestAsyncLoopReuse:
 
     @pytest.mark.asyncio
     async def test_async_dispatch_reuses_asyncio_loop(self):
-        """Verify dispatch_async reuses the same asyncio loop for async handlers."""
         loop_ids = []
 
         class TrackCommand(Command[CommandRequest, CommandResponse]):
@@ -260,40 +241,33 @@ class TestAsyncLoopReuse:
         host = ModuleHost()
         host.register(LoopTrackerModule())
 
-        command1 = TrackCommand(request=CommandRequest())
-        command2 = TrackCommand(request=CommandRequest())
+        await host.dispatch_async(TrackCommand(request=CommandRequest()))
+        await host.dispatch_async(TrackCommand(request=CommandRequest()))
 
-        await host.dispatch_async(command1)
-        await host.dispatch_async(command2)
-
-        assert len(loop_ids) == 2, "Should have tracked two loop IDs"
+        assert len(loop_ids) == 2
         assert len(set(loop_ids)) == 1, "Should reuse the same event loop"
 
-    def test_sync_dispatch_with_async_handler_uses_asyncio_run(self):
-        """Verify sync dispatch uses asyncio.run for async handlers (no nested loops)."""
+    def test_sync_dispatch_runs_sync_handler(self):
+        """Sync ``dispatch()`` runs a sync handler via ``asyncio.run``."""
         call_count = 0
 
         class CountCommand(Command[CommandRequest, CommandResponse]):
             name = "count"
 
-        @module(name="AsyncCounter")
-        class AsyncCounterModule(Module):
+        @module(name="SyncCounter")
+        class SyncCounterModule(Module):
             @handles(CountCommand)
-            async def count(self, command: CountCommand) -> CommandResponse:
+            def count(self, command: CountCommand) -> CommandResponse:
                 nonlocal call_count
                 call_count += 1
                 return CommandResponse()
 
         host = ModuleHost()
-        host.register(AsyncCounterModule())
+        host.register(SyncCounterModule())
 
-        # Multiple sync calls with async handlers should work without issues
-        command1 = CountCommand(request=CommandRequest())
-        command2 = CountCommand(request=CommandRequest())
+        response1 = host.dispatch(CountCommand(request=CommandRequest()))
+        response2 = host.dispatch(CountCommand(request=CommandRequest()))
 
-        response1 = host.dispatch(command1)
-        response2 = host.dispatch(command2)
-
-        assert call_count == 2, "Both commands should be handled"
+        assert call_count == 2
         assert response1 is not None
         assert response2 is not None

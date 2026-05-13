@@ -309,28 +309,29 @@ class TestCommandTracing:
 
 
 class TestHostWithTracing:
-    """Tests for ModuleHost with tracing."""
+    """Tests for ModuleHost with the new ``TracingMiddleware``."""
 
     def test_tracing_injects_context(self):
-        """ModuleHost injects trace context when enabled."""
-        config = ModuleHostConfig(enable_tracing=True)
+        from pymodules import TracingMiddleware
+
+        config = ModuleHostConfig(middleware=[TracingMiddleware()])
         host = ModuleHost(config=config)
         host.register(TracingModule())
 
         command = TracingCommand(request=TracingInput(value="test"))
         host.dispatch(command)
 
-        # Command should have trace context
+        # The middleware injects at least a correlation_id when no trace
+        # is currently active.
         assert "correlation_id" in command.meta
 
     def test_tracing_disabled_no_context(self):
-        """ModuleHost doesn't inject trace context when disabled."""
-        config = ModuleHostConfig(enable_tracing=False)
-        host = ModuleHost(config=config)
+        """Without ``TracingMiddleware``, no trace context is injected."""
+        host = ModuleHost(config=ModuleHostConfig())
         host.register(TracingModule())
 
         command = TracingCommand(request=TracingInput(value="test"))
         host.dispatch(command)
 
-        # Command should not have trace context
         assert "trace_id" not in command.meta
+        assert "correlation_id" not in command.meta

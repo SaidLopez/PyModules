@@ -10,10 +10,11 @@ Subpackages:
     pymodules.contrib.api - REST API generation layer
     pymodules.contrib.db - Database abstraction layer
     pymodules.contrib.health - Kubernetes-shaped health checks
+    pymodules.contrib.tracing - Tracing exporters (e.g. OpenTelemetry)
     pymodules.fastapi - Legacy FastAPI integration (deprecated; use pymodules.contrib.api)
 """
 
-from .config import Metrics, ModuleHostConfig
+from .config import ModuleHostConfig
 from .exceptions import (
     CommandHandlingError,
     ConfigurationError,
@@ -23,27 +24,38 @@ from .exceptions import (
     ModuleRegistrationError,
     PyModulesError,
     RepositoryError,
+    SyncDispatchInAsyncContextError,
+    SyncDispatchOnAsyncHandlerError,
 )
 from .host import ModuleHost
 from .interfaces import Command, CommandRequest, CommandResponse
 from .logging import configure_logging, get_logger
+from .middleware import Middleware, NextCall
 from .module import Module, ModuleMetadata, handles, module
 from .resilience import (
     CircuitBreaker,
+    CircuitBreakerMiddleware,
     CircuitBreakerOpen,
     CircuitState,
     DeadLetterEntry,
     DeadLetterQueue,
+    DLQMiddleware,
     Fallback,
-    RateLimiter,
+    FallbackMiddleware,
     RateLimitExceeded,
+    RateLimitMiddleware,
+    RetryMiddleware,
     RetryPolicy,
+    default_middleware,
+    default_middleware_from_env,
 )
 from .tracing import (
-    OpenTelemetryExporter,
+    LifecycleMiddleware,
+    MetricsMiddleware,
     Span,
     TraceContext,
     Tracer,
+    TracingMiddleware,
     extract_trace_context,
     generate_id,
     get_correlation_id,
@@ -66,7 +78,9 @@ __all__ = [
     "handles",
     # Configuration
     "ModuleHostConfig",
-    "Metrics",
+    # Middleware
+    "Middleware",
+    "NextCall",
     # Exceptions
     "PyModulesError",
     "CommandHandlingError",
@@ -78,21 +92,32 @@ __all__ = [
     "RepositoryError",
     "RateLimitExceeded",
     "CircuitBreakerOpen",
+    "SyncDispatchOnAsyncHandlerError",
+    "SyncDispatchInAsyncContextError",
     # Logging
     "configure_logging",
     "get_logger",
-    # Resilience
-    "RateLimiter",
+    # Resilience middleware
+    "RateLimitMiddleware",
     "CircuitBreaker",
+    "CircuitBreakerMiddleware",
     "CircuitState",
     "RetryPolicy",
+    "RetryMiddleware",
     "DeadLetterQueue",
     "DeadLetterEntry",
+    "DLQMiddleware",
     "Fallback",
-    # Tracing
+    "FallbackMiddleware",
+    "default_middleware",
+    "default_middleware_from_env",
+    # Tracing / observability middleware
     "Tracer",
     "TraceContext",
     "Span",
+    "TracingMiddleware",
+    "MetricsMiddleware",
+    "LifecycleMiddleware",
     "get_tracer",
     "set_tracer",
     "get_current_trace",
@@ -100,7 +125,6 @@ __all__ = [
     "inject_trace_context",
     "extract_trace_context",
     "generate_id",
-    "OpenTelemetryExporter",
 ]
 
 __version__ = "0.3.0"

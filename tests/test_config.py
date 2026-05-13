@@ -5,11 +5,14 @@ Tests for configuration management.
 import logging
 from dataclasses import dataclass
 
+import pytest
+
 from pymodules import (
     Command,
     CommandRequest,
     CommandResponse,
-    Metrics,
+    LifecycleMiddleware,
+    MetricsMiddleware,
     Module,
     ModuleHost,
     ModuleHostConfig,
@@ -40,44 +43,51 @@ class ConfigModule(Module):
 
 
 class TestModuleHostConfig:
-    """Tests for ModuleHostConfig."""
+    """Tests for the slimmed-down ``ModuleHostConfig`` dataclass."""
 
     def test_default_config(self):
-        """Test default configuration values."""
         config = ModuleHostConfig()
         assert config.max_workers == 4
         assert config.propagate_exceptions is True
         assert config.log_level == logging.INFO
-        assert config.on_error is None
-        assert config.on_event_start is None
-        assert config.on_event_end is None
-        assert config.enable_metrics is False
+        assert config.middleware == []
 
     def test_custom_config(self):
-        """Test custom configuration values."""
-        error_handler = lambda e, c: None
-
+        mw = MetricsMiddleware()
         config = ModuleHostConfig(
             max_workers=16,
             propagate_exceptions=False,
             log_level=logging.DEBUG,
-            on_error=error_handler,
-            enable_metrics=True,
+            middleware=[mw],
         )
-
         assert config.max_workers == 16
         assert config.propagate_exceptions is False
         assert config.log_level == logging.DEBUG
-        assert config.on_error is error_handler
-        assert config.enable_metrics is True
+        assert config.middleware == [mw]
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "rate_limiter",
+            "circuit_breaker",
+            "retry_policy",
+            "dead_letter_queue",
+            "tracer",
+            "enable_metrics",
+            "enable_tracing",
+            "on_error",
+            "on_event_start",
+            "on_event_end",
+        ],
+    )
+    def test_deleted_fields_absent(self, field):
+        """The 1.0 migration removed every transitional flag."""
+        assert not hasattr(ModuleHostConfig(), field)
 
     def test_from_env_defaults(self, monkeypatch):
-        """Test from_env with no environment variables."""
-        # Clear any existing env vars
         monkeypatch.delenv("PYMODULES_MAX_WORKERS", raising=False)
         monkeypatch.delenv("PYMODULES_PROPAGATE_EXCEPTIONS", raising=False)
         monkeypatch.delenv("PYMODULES_LOG_LEVEL", raising=False)
-        monkeypatch.delenv("PYMODULES_ENABLE_METRICS", raising=False)
 
         config = ModuleHostConfig.from_env()
         assert config.max_workers == 4
@@ -85,128 +95,68 @@ class TestModuleHostConfig:
         assert config.log_level == logging.INFO
 
     def test_from_env_custom(self, monkeypatch):
-        """Test from_env with custom environment variables."""
         monkeypatch.setenv("PYMODULES_MAX_WORKERS", "8")
         monkeypatch.setenv("PYMODULES_PROPAGATE_EXCEPTIONS", "false")
         monkeypatch.setenv("PYMODULES_LOG_LEVEL", "DEBUG")
-        monkeypatch.setenv("PYMODULES_ENABLE_METRICS", "true")
 
         config = ModuleHostConfig.from_env()
         assert config.max_workers == 8
         assert config.propagate_exceptions is False
         assert config.log_level == logging.DEBUG
-        assert config.enable_metrics is True
 
 
-class TestMetrics:
-    """Tests for metrics collection."""
+class TestMetricsMiddleware:
+    """Tests for ``MetricsMiddleware`` (counters live on the middleware now)."""
 
-    def test_metrics_disabled_by_default(self):
-        """Metrics should be disabled by default."""
-        host = ModuleHost()
-        assert host.metrics is None
+    def test_counters_initially_zero(self):
+        mw = MetricsMiddleware()
+        assert mw.dispatched == 0
+        assert mw.succeeded == 0
+        assert mw.failed == 0
+        assert mw.unmatched == 0
 
-    def test_metrics_enabled(self):
-        """Test metrics when enabled."""
-        config = ModuleHostConfig(enable_metrics=True)
-        host = ModuleHost(config=config)
+    def test_tracking(self):
+        mw = MetricsMiddleware()
+        host = ModuleHost(config=ModuleHostConfig(middleware=[mw]))
         host.register(ConfigModule())
 
-        assert host.metrics is not None
-        assert host.metrics.events_dispatched == 0
-        assert host.metrics.modules_registered == 1
+        host.dispatch(ConfigCommand(request=ConfigInput(value="test")))
 
-    def test_metrics_tracking(self):
-        """Test that metrics are properly tracked."""
-        config = ModuleHostConfig(enable_metrics=True)
-        host = ModuleHost(config=config)
-        host.register(ConfigModule())
+        assert mw.dispatched == 1
+        assert mw.succeeded == 1
+        assert mw.unmatched == 0
+        assert mw.failed == 0
 
-        # Dispatch handled command
-        command = ConfigCommand(request=ConfigInput(value="test"))
-        host.dispatch(command)
+    def test_unmatched_command(self):
+        mw = MetricsMiddleware()
+        host = ModuleHost(config=ModuleHostConfig(middleware=[mw]))
+        # No module registered.
 
-        assert host.metrics.events_dispatched == 1
-        assert host.metrics.events_handled == 1
-        assert host.metrics.events_unhandled == 0
+        host.dispatch(ConfigCommand(request=ConfigInput(value="test")))
 
-    def test_metrics_unhandled_command(self):
-        """Test metrics for unhandled commands."""
-        config = ModuleHostConfig(enable_metrics=True)
-        host = ModuleHost(config=config)
-        # No modules registered
-
-        command = ConfigCommand(request=ConfigInput(value="test"))
-        host.dispatch(command)
-
-        assert host.metrics.events_dispatched == 1
-        assert host.metrics.events_handled == 0
-        assert host.metrics.events_unhandled == 1
-
-    def test_metrics_to_dict(self):
-        """Test metrics serialization."""
-        config = ModuleHostConfig(enable_metrics=True)
-        host = ModuleHost(config=config)
-        host.register(ConfigModule())
-
-        command = ConfigCommand(request=ConfigInput(value="test"))
-        host.dispatch(command)
-
-        metrics_dict = host.metrics.to_dict()
-        assert isinstance(metrics_dict, dict)
-        assert metrics_dict["events_dispatched"] == 1
-        assert metrics_dict["events_handled"] == 1
-        assert metrics_dict["modules_registered"] == 1
-
-    def test_metrics_reset(self):
-        """Test metrics reset functionality."""
-        metrics = Metrics(
-            events_dispatched=10,
-            events_handled=8,
-            events_unhandled=2,
-            events_failed=0,
-            modules_registered=5,
-        )
-
-        metrics.reset()
-
-        assert metrics.events_dispatched == 0
-        assert metrics.events_handled == 0
-        assert metrics.events_unhandled == 0
-        assert metrics.events_failed == 0
-        # modules_registered should NOT be reset
-        assert metrics.modules_registered == 5
+        assert mw.dispatched == 1
+        assert mw.succeeded == 0
+        assert mw.unmatched == 1
 
 
-class TestLifecycleHooks:
-    """Tests for lifecycle callbacks."""
+class TestLifecycleMiddleware:
+    """Tests for the unified ``LifecycleMiddleware``."""
 
-    def test_on_event_start_callback(self):
-        """Test on_event_start is called."""
+    def test_on_start_callback(self):
         started = []
-
-        def on_start(command):
-            started.append(command)
-
-        config = ModuleHostConfig(on_event_start=on_start)
-        host = ModuleHost(config=config)
+        lifecycle = LifecycleMiddleware(on_start=started.append)
+        host = ModuleHost(config=ModuleHostConfig(middleware=[lifecycle]))
         host.register(ConfigModule())
 
         command = ConfigCommand(request=ConfigInput(value="test"))
         host.dispatch(command)
 
-        assert len(started) == 1
-        assert started[0] is command
+        assert started == [command]
 
-    def test_on_event_end_callback(self):
-        """Test on_event_end is called."""
+    def test_on_end_callback(self):
         ended = []
-
-        def on_end(command, handled):
-            ended.append((command, handled))
-
-        config = ModuleHostConfig(on_event_end=on_end)
-        host = ModuleHost(config=config)
+        lifecycle = LifecycleMiddleware(on_end=lambda c, h: ended.append((c, h)))
+        host = ModuleHost(config=ModuleHostConfig(middleware=[lifecycle]))
         host.register(ConfigModule())
 
         command = ConfigCommand(request=ConfigInput(value="test"))
@@ -217,17 +167,13 @@ class TestLifecycleHooks:
         assert ended[0][1] is True
 
     def test_callback_error_does_not_break_dispatch(self):
-        """Test that callback errors don't break dispatch."""
-
-        def failing_callback(command):
+        def failing(_command):
             raise RuntimeError("Callback failed")
 
-        config = ModuleHostConfig(on_event_start=failing_callback)
-        host = ModuleHost(config=config)
+        lifecycle = LifecycleMiddleware(on_start=failing)
+        host = ModuleHost(config=ModuleHostConfig(middleware=[lifecycle]))
         host.register(ConfigModule())
 
-        command = ConfigCommand(request=ConfigInput(value="test"))
-        # Should not raise
-        result = host.dispatch(command)
-
+        # Should not raise.
+        result = host.dispatch(ConfigCommand(request=ConfigInput(value="test")))
         assert isinstance(result, ConfigOutput)

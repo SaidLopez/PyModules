@@ -25,27 +25,34 @@ from examples.calculator_module import (
 )
 from examples.greet_module import GreetCommand, GreeterModule, GreetInput, GreetOutput
 from examples.logging_module import LoggingModule
-from pymodules import ModuleHost, ModuleHostConfig
+from pymodules import MetricsMiddleware, ModuleHost, ModuleHostConfig, TracingMiddleware
 from pymodules.fastapi import PyModulesAPI
-from pymodules.resilience import CircuitBreaker, RateLimiter
+from pymodules.resilience import (
+    CircuitBreaker,
+    CircuitBreakerMiddleware,
+    RateLimitMiddleware,
+)
 
 # =============================================================================
 # Production Configuration
 # =============================================================================
 
+metrics = MetricsMiddleware()
+breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=30, success_threshold=2)
+
 config = ModuleHostConfig(
     max_workers=4,
     propagate_exceptions=False,  # Don't crash on handler errors
-    enable_metrics=True,  # Enable metrics collection
-    enable_tracing=True,  # Enable correlation ID injection
-    # Rate limiting: 100 requests/second with burst of 20
-    rate_limiter=RateLimiter(rate=100, burst=20, block=False),
-    # Circuit breaker: Open after 5 failures, recover after 30s
-    circuit_breaker=CircuitBreaker(
-        failure_threshold=5,
-        recovery_timeout=30,
-        success_threshold=2,
-    ),
+    middleware=[
+        # Rate limiting: 100 requests/second with burst of 20
+        RateLimitMiddleware(rate=100, burst=20, block=False),
+        # Circuit breaker: open after 5 failures, recover after 30s
+        CircuitBreakerMiddleware(breaker),
+        # Correlation IDs on every command
+        TracingMiddleware(),
+        # Counters available on ``metrics`` reference
+        metrics,
+    ],
 )
 
 # =============================================================================
@@ -181,10 +188,9 @@ async def startup():
     """Log startup information."""
     print("Starting PyModules FastAPI Example")
     print(f"Registered modules: {[m.metadata.name for m in host.modules]}")
-    print(f"Metrics enabled: {config.enable_metrics}")
-    print(f"Tracing enabled: {config.enable_tracing}")
-    print(f"Rate limiter: {config.rate_limiter is not None}")
-    print(f"Circuit breaker: {config.circuit_breaker is not None}")
+    print(f"Middleware count: {len(config.middleware)}")
+    print(f"Metrics counter (dispatched): {metrics.dispatched}")
+    print(f"Circuit breaker state: {breaker.state.value}")
 
 
 @app.on_event("shutdown")

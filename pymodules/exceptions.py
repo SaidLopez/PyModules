@@ -74,6 +74,30 @@ class ConfigurationError(PyModulesError):
     pass
 
 
+class SyncDispatchOnAsyncHandlerError(PyModulesError):
+    """
+    Raised by sync ``ModuleHost.dispatch()`` when the resolved handler is a
+    coroutine function.
+
+    There is no implicit ``asyncio.run()`` bridging — the caller must use
+    ``dispatch_async()`` for async handlers.
+    """
+
+    pass
+
+
+class SyncDispatchInAsyncContextError(PyModulesError):
+    """
+    Raised by sync ``ModuleHost.dispatch()`` when an event loop is already
+    running in the current thread.
+
+    Sync dispatch never starts or joins a running loop. The caller must use
+    ``dispatch_async()`` from async contexts.
+    """
+
+    pass
+
+
 # Database layer exceptions
 
 
