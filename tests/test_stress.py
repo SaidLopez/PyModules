@@ -18,6 +18,7 @@ from pymodules import (
     Module,
     ModuleHost,
     ModuleHostConfig,
+    handles,
     module,
 )
 
@@ -43,29 +44,23 @@ class StressModule(Module):
         self.call_count = 0
         self._lock = threading.Lock()
 
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, StressCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, StressCommand):
-            with self._lock:
-                self.call_count += 1
-            # Simulate some work
-            result = command.input.value * 2
-            command.output = StressOutput(result=result)
-            command.handled = True
+    @handles(StressCommand)
+    def handle_stress(self, command: StressCommand) -> None:
+        with self._lock:
+            self.call_count += 1
+        # Simulate some work
+        result = command.input.value * 2
+        command.output = StressOutput(result=result)
+        command.handled = True
 
 
 @module(name="SlowModule")
 class SlowModule(Module):
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, StressCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, StressCommand):
-            time.sleep(0.01)  # 10ms delay
-            command.output = StressOutput(result=command.input.value)
-            command.handled = True
+    @handles(StressCommand)
+    def handle_stress(self, command: StressCommand) -> None:
+        time.sleep(0.01)  # 10ms delay
+        command.output = StressOutput(result=command.input.value)
+        command.handled = True
 
 
 @pytest.mark.slow
@@ -141,16 +136,14 @@ class TestManyModules:
         """Test performance with many registered modules."""
         host = ModuleHost()
 
-        # Register 100 modules, only the last one handles StressCommand
+        # Register 100 modules. Dummy modules claim no Commands (no @handles
+        # methods); only the last one handles StressCommand. Type-routed
+        # dispatch is O(1) so registered-but-claim-nothing modules are free.
         for i in range(99):
 
             @module(name=f"DummyModule{i}")
             class DummyModule(Module):
-                def can_handle(self, command: Command) -> bool:
-                    return False
-
-                def handle(self, command: Command) -> None:
-                    pass
+                pass
 
             host.register(DummyModule())
 
@@ -204,10 +197,8 @@ class TestResourceCleanup:
 
         @module(name="TrackingModule")
         class TrackingModule(Module):
-            def can_handle(self, command: Command) -> bool:
-                return isinstance(command, StressCommand)
-
-            def handle(self, command: Command) -> None:
+            @handles(StressCommand)
+            def track(self, command: StressCommand) -> None:
                 # Check commands_in_progress during handling
                 tracking.append(len(host.commands_in_progress))
                 command.handled = True

@@ -13,6 +13,7 @@ from pymodules import (
     Module,
     ModuleHost,
     ModuleHostConfig,
+    handles,
     module,
 )
 
@@ -33,13 +34,10 @@ class ConfigCommand(Command[ConfigInput, ConfigOutput]):
 
 @module(name="ConfigModule")
 class ConfigModule(Module):
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, ConfigCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, ConfigCommand):
-            command.output = ConfigOutput(result=f"processed: {command.input.value}")
-            command.handled = True
+    @handles(ConfigCommand)
+    def handle_config(self, command: ConfigCommand) -> None:
+        command.output = ConfigOutput(result=f"processed: {command.input.value}")
+        command.handled = True
 
 
 class TestModuleHostConfig:

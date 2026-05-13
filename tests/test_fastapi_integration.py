@@ -18,6 +18,7 @@ from pymodules import (
     CommandResponse,
     Module,
     ModuleHost,
+    handles,
     module,
 )
 from pymodules.fastapi import PyModulesAPI
@@ -39,13 +40,10 @@ class GreetCommand(Command[GreetInput, GreetOutput]):
 
 @module(name="GreeterModule")
 class GreeterModule(Module):
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, GreetCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, GreetCommand):
-            command.output = GreetOutput(message=f"Hello, {command.input.name}!")
-            command.handled = True
+    @handles(GreetCommand)
+    def greet(self, command: GreetCommand) -> None:
+        command.output = GreetOutput(message=f"Hello, {command.input.name}!")
+        command.handled = True
 
 
 @dataclass
@@ -66,25 +64,22 @@ class CalculateCommand(Command[CalculateInput, CalculateOutput]):
 
 @module(name="CalculatorModule")
 class CalculatorModule(Module):
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, CalculateCommand)
+    @handles(CalculateCommand)
+    def calculate(self, command: CalculateCommand) -> None:
+        a, b = command.input.a, command.input.b
+        op = command.input.operation
 
-    def handle(self, command: Command) -> None:
-        if isinstance(command, CalculateCommand):
-            a, b = command.input.a, command.input.b
-            op = command.input.operation
+        if op == "add":
+            result = a + b
+        elif op == "subtract":
+            result = a - b
+        elif op == "multiply":
+            result = a * b
+        else:
+            result = 0
 
-            if op == "add":
-                result = a + b
-            elif op == "subtract":
-                result = a - b
-            elif op == "multiply":
-                result = a * b
-            else:
-                result = 0
-
-            command.output = CalculateOutput(result=result)
-            command.handled = True
+        command.output = CalculateOutput(result=result)
+        command.handled = True
 
 
 @pytest.fixture

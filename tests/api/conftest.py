@@ -99,40 +99,38 @@ def sample_commands():
 @pytest.fixture
 def sample_module(sample_commands):
     """Create a sample module that handles the commands."""
-    from pymodules import Module, module
+    from pymodules import Module, handles, module
+
+    CreateUser = sample_commands["CreateUser"]
+    GetUser = sample_commands["GetUser"]
+    ListUsers = sample_commands["ListUsers"]
 
     @module(name="user", description="User management")
     class UserModule(Module):
-        def can_handle(self, command):
-            return isinstance(
-                command,
-                (
-                    sample_commands["CreateUser"],
-                    sample_commands["GetUser"],
-                    sample_commands["ListUsers"],
-                ),
+        @handles(CreateUser)
+        async def create_user(self, command):
+            command.output = sample_commands["CreateUserOutput"](
+                id="123",
+                name=command.input.name,
+                email=command.input.email,
             )
+            command.handled = True
 
-        async def handle(self, command):
-            if isinstance(command, sample_commands["CreateUser"]):
-                command.output = sample_commands["CreateUserOutput"](
-                    id="123",
-                    name=command.input.name,
-                    email=command.input.email,
-                )
-                command.handled = True
-            elif isinstance(command, sample_commands["GetUser"]):
-                command.output = sample_commands["GetUserOutput"](
-                    id=command.input.user_id,
-                    name="Test User",
-                    email="test@example.com",
-                )
-                command.handled = True
-            elif isinstance(command, sample_commands["ListUsers"]):
-                command.output = sample_commands["ListUsersOutput"](
-                    users=[{"id": "1", "name": "User 1"}],
-                    total=1,
-                )
-                command.handled = True
+        @handles(GetUser)
+        async def get_user(self, command):
+            command.output = sample_commands["GetUserOutput"](
+                id=command.input.user_id,
+                name="Test User",
+                email="test@example.com",
+            )
+            command.handled = True
+
+        @handles(ListUsers)
+        async def list_users(self, command):
+            command.output = sample_commands["ListUsersOutput"](
+                users=[{"id": "1", "name": "User 1"}],
+                total=1,
+            )
+            command.handled = True
 
     return UserModule()

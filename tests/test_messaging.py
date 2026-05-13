@@ -13,6 +13,7 @@ from pymodules import (
     CommandResponse,
     Module,
     ModuleHost,
+    handles,
     module,
 )
 from pymodules.contrib.messaging.broker import (
@@ -54,10 +55,8 @@ class ConsumerModule(Module):
         super().__init__()
         self.handled_commands: list[Command] = []
 
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, ExternalEvent)
-
-    def handle(self, command: Command) -> None:
+    @handles(ExternalEvent)
+    def handle_external(self, command: ExternalEvent) -> None:
         self.handled_commands.append(command)
         command.handled = True
 

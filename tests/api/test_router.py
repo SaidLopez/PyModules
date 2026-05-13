@@ -128,15 +128,15 @@ class TestModuleRouter:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from pymodules import Module, module
+        from pymodules import Module, handles, module
         from pymodules.contrib.api import ModuleRouter, register_error_handlers
+
+        CreateUser = sample_commands["CreateUser"]
 
         @module(name="failing")
         class FailingModule(Module):
-            def can_handle(self, command):
-                return True
-
-            async def handle(self, command):
+            @handles(CreateUser)
+            async def fail(self, command):
                 raise ValueError("Something went wrong")
 
         host.register(FailingModule())

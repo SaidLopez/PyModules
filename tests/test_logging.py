@@ -13,6 +13,7 @@ from pymodules import (
     Module,
     ModuleHost,
     ModuleHostConfig,
+    handles,
     module,
 )
 from pymodules.logging import configure_logging, get_logger
@@ -34,13 +35,10 @@ class LogCommand(Command[LogInput, LogOutput]):
 
 @module(name="LogTestModule")
 class LogTestModule(Module):
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, LogCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, LogCommand):
-            command.output = LogOutput(result=f"logged: {command.input.value}")
-            command.handled = True
+    @handles(LogCommand)
+    def handle_log(self, command: LogCommand) -> None:
+        command.output = LogOutput(result=f"logged: {command.input.value}")
+        command.handled = True
 
 
 class TestConfigureLogging:

@@ -15,6 +15,7 @@ from pymodules import (
     ModuleHost,
     ModuleHostConfig,
     ModuleRegistrationError,
+    handles,
     module,
 )
 
@@ -35,27 +36,18 @@ class ErrorCommand(Command[ErrorInput, ErrorOutput]):
 
 @module(name="ErrorModule", description="A module that can raise errors")
 class ErrorModule(Module):
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, ErrorCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, ErrorCommand):
-            if command.input.should_fail:
-                raise ValueError("Intentional test error")
-            command.output = ErrorOutput(result="success")
-            command.handled = True
+    @handles(ErrorCommand)
+    def handle_error(self, command: ErrorCommand) -> None:
+        if command.input.should_fail:
+            raise ValueError("Intentional test error")
+        command.output = ErrorOutput(result="success")
+        command.handled = True
 
 
 @module(name="FailOnLoad", description="Fails during registration")
 class FailOnLoadModule(Module):
     def on_load(self) -> None:
         raise RuntimeError("Failed to load")
-
-    def can_handle(self, command: Command) -> bool:
-        return False
-
-    def handle(self, command: Command) -> None:
-        pass
 
 
 class TestErrorPropagation:

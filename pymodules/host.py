@@ -1,20 +1,27 @@
 """
 ModuleHost - Central dispatcher for the PyModules command system.
 
-The ModuleHost manages module registration and routes commands to
-appropriate handlers based on their can_handle() declarations.
+The ModuleHost manages module registration and routes commands to a single
+claiming handler resolved in O(1) by ``type(command)``. Each Module method
+decorated with ``@handles(CommandClass)`` contributes one entry to the
+host's dispatch table.
 """
 
 import asyncio
 import inspect
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
 from .config import Metrics, ModuleHostConfig
-from .exceptions import CommandHandlingError, ModuleRegistrationError
+from .exceptions import (
+    CommandHandlingError,
+    DuplicateCommandError,
+    ModuleRegistrationError,
+)
 from .interfaces import Command
 from .logging import configure_logging, host_logger
-from .module import Module
+from .module import HANDLES_ATTR, Module
 from .resilience import CircuitBreakerOpen, RateLimitExceeded
 from .tracing import inject_trace_context
 
@@ -24,8 +31,8 @@ class ModuleHost:
     Central coordinator that manages modules and dispatches commands.
 
     The ModuleHost is the core of the PyModules system. It:
-    - Registers and manages module instances
-    - Routes commands to modules that can handle them
+    - Registers Module instances and builds a type-routed dispatch table
+    - Routes each Command in O(1) to the single Module that claims its type
     - Provides both sync and async dispatch
     - Supports configurable error handling and logging
     - Includes resilience features: rate limiting, circuit breaker, retry, DLQ
@@ -39,20 +46,6 @@ class ModuleHost:
         command = GreetCommand(input=GreetRequest(name="World"))
         host.dispatch(command)
         print(command.output.message)  # "Hello, World!"
-
-    Example with configuration:
-        from pymodules.config import ModuleHostConfig
-        from pymodules.resilience import RateLimiter, CircuitBreaker
-
-        config = ModuleHostConfig(
-            max_workers=8,
-            propagate_exceptions=False,
-            rate_limiter=RateLimiter(rate=100, burst=10),
-            circuit_breaker=CircuitBreaker(failure_threshold=5),
-            enable_metrics=True,
-            enable_tracing=True,
-        )
-        host = ModuleHost(config=config)
     """
 
     def __init__(self, config: ModuleHostConfig | None = None):
@@ -65,6 +58,8 @@ class ModuleHost:
         """
         self._config = config or ModuleHostConfig.from_env()
         self._modules: list[Module] = []
+        # type-routed dispatch table: Command class -> bound handler method
+        self._dispatch_table: dict[type, Callable[[Command], object]] = {}
         self._commands_in_progress: dict[str, Command] = {}
         self._executor = ThreadPoolExecutor(max_workers=self._config.max_workers)
         self._metrics = Metrics() if self._config.enable_metrics else None
@@ -103,40 +98,96 @@ class ModuleHost:
         """Time since host was created, in seconds."""
         return time.time() - self._start_time
 
-    def register(self, module: Module) -> "ModuleHost":
+    def _collect_handlers(self, module: Module) -> list[tuple[type, Callable[[Command], object]]]:
+        """
+        Scan ``module``'s class for ``@handles``-decorated methods.
+
+        Returns a list of ``(command_class, bound_method)`` pairs.
+        """
+        pairs: list[tuple[type, Callable[[Command], object]]] = []
+        for name, member in inspect.getmembers(type(module), predicate=inspect.isfunction):
+            claims = getattr(member, HANDLES_ATTR, None)
+            if not claims:
+                continue
+            bound = getattr(module, name)
+            for cmd_class in claims:
+                pairs.append((cmd_class, bound))
+        return pairs
+
+    def register(self, module: Module, override: bool = False) -> "ModuleHost":
         """
         Register a module with this host.
 
-        The module's host property will be set to this host,
-        allowing it to dispatch commands to other modules.
+        Scans the module's class for ``@handles``-decorated methods and
+        adds each claimed Command class to the dispatch table. Raises
+        :class:`DuplicateCommandError` if any claim collides with an
+        already-registered module's claim, unless ``override=True``.
 
         Args:
             module: The module to register
+            override: If True, silently overwrite any existing claim for
+                the same Command class. Useful for test doubles.
 
         Returns:
             self (for method chaining)
 
         Raises:
-            ModuleRegistrationError: If registration fails
+            ModuleRegistrationError: If registration fails for any reason
+                (including duplicate claims when ``override`` is False).
         """
         try:
+            new_pairs = self._collect_handlers(module)
+
+            if not override:
+                for cmd_class, _ in new_pairs:
+                    existing = self._dispatch_table.get(cmd_class)
+                    if existing is not None and existing.__self__ is not module:
+                        existing_module = existing.__self__
+                        raise DuplicateCommandError(
+                            f"Command {cmd_class.__name__} is already claimed by "
+                            f"{type(existing_module).__name__} "
+                            f"(module name: {existing_module.metadata.name}); "
+                            f"{type(module).__name__} "
+                            f"(module name: {module.metadata.name}) cannot also claim it. "
+                            "Pass override=True to ModuleHost.register to replace."
+                        )
+
             module._host = self
             self._modules.append(module)
+
+            # Commit the dispatch table entries (override semantics: clobber).
+            for cmd_class, bound in new_pairs:
+                self._dispatch_table[cmd_class] = bound
+
             module.on_load()
 
             if self._metrics:
                 self._metrics.modules_registered = len(self._modules)
 
             host_logger.info(
-                "Registered module: %s (v%s)",
+                "Registered module: %s (v%s) claiming %d command type(s)",
                 module.metadata.name,
                 module.metadata.version,
+                len(new_pairs),
             )
+        except DuplicateCommandError:
+            # Rollback partial state and re-raise unchanged so callers can
+            # distinguish duplicate-claim from other registration failures.
+            if module in self._modules:
+                self._modules.remove(module)
+            module._host = None
+            raise
         except Exception as e:
             host_logger.error("Failed to register module %s: %s", type(module).__name__, e)
             # Rollback
             if module in self._modules:
                 self._modules.remove(module)
+            # Remove any partial dispatch table entries that point at this module.
+            self._dispatch_table = {
+                k: v
+                for k, v in self._dispatch_table.items()
+                if getattr(v, "__self__", None) is not module
+            }
             module._host = None
             raise ModuleRegistrationError(f"Failed to register {type(module).__name__}: {e}") from e
 
@@ -145,6 +196,9 @@ class ModuleHost:
     def unregister(self, module: Module) -> "ModuleHost":
         """
         Unregister a module from this host.
+
+        Removes every dispatch-table entry whose bound method belongs to
+        the given module.
 
         Args:
             module: The module to unregister
@@ -161,6 +215,12 @@ class ModuleHost:
                     module.metadata.name,
                     e,
                 )
+            # Drop every dispatch entry bound to this module.
+            self._dispatch_table = {
+                k: v
+                for k, v in self._dispatch_table.items()
+                if getattr(v, "__self__", None) is not module
+            }
             module._host = None
             self._modules.remove(module)
 
@@ -172,15 +232,12 @@ class ModuleHost:
 
     def can_handle(self, command: Command) -> bool:
         """
-        Check if any registered module can handle the command.
+        True if a registered Module claims ``type(command)``.
 
-        Args:
-            command: The command to check
-
-        Returns:
-            True if at least one module can handle the command
+        This is a convenience check around the dispatch table; it never
+        runs handler code.
         """
-        return any(m.can_handle(command) for m in self._modules)
+        return type(command) in self._dispatch_table
 
     def _check_rate_limit(self, command: Command) -> None:
         """Check rate limit and raise if exceeded."""
@@ -300,11 +357,16 @@ class ModuleHost:
             except Exception as e:
                 host_logger.warning("on_event_end callback failed: %s", e)
 
-    def _handle_with_retry(self, command: Command, module: Module, attempt: int = 0) -> bool:
+    def _handle_with_retry(
+        self,
+        command: Command,
+        handler: Callable[[Command], object],
+        attempt: int = 0,
+    ) -> bool:
         """Handle command with retry logic."""
         try:
             # Check if handler is async
-            if inspect.iscoroutinefunction(module.handle):
+            if inspect.iscoroutinefunction(handler):
                 # Run async handler - check for existing running loop first
                 try:
                     asyncio.get_running_loop()
@@ -317,9 +379,9 @@ class ModuleHost:
                     if "Cannot call sync dispatch()" in str(e):
                         raise
                     # No running loop - use asyncio.run() which handles loop lifecycle
-                    asyncio.run(module.handle(command))
+                    asyncio.run(handler(command))
             else:
-                module.handle(command)
+                handler(command)
 
             # Record success with circuit breaker
             if self._config.circuit_breaker:
@@ -346,18 +408,17 @@ class ModuleHost:
                     e,
                 )
                 time.sleep(delay)
-                return self._handle_with_retry(command, module, attempt + 1)
+                return self._handle_with_retry(command, handler, attempt + 1)
 
             # No more retries, raise or send to DLQ
             raise
 
     def dispatch(self, command: Command) -> Command:
         """
-        Dispatch a command to registered modules.
+        Dispatch a command to the registered handler for its type.
 
-        The command is passed to each module's can_handle() method.
-        If a module can handle it, handle() is called. Processing
-        stops when a module sets command.handled = True.
+        The handler is resolved in O(1) by ``type(command)``. If no module
+        claims the type, the command flows through with ``handled=False``.
 
         Args:
             command: The command to dispatch
@@ -367,7 +428,7 @@ class ModuleHost:
 
         Raises:
             CommandHandlingError: If propagate_exceptions is True and
-                               a handler raises an exception.
+                               the handler raises an exception.
             RateLimitExceeded: If rate limit is exceeded.
             CircuitBreakerOpen: If circuit breaker is open.
         """
@@ -382,38 +443,41 @@ class ModuleHost:
 
         host_logger.debug("Dispatching command: %s (id=%s)", command.name, command_id)
 
-        error_occurred = None
+        handler = self._dispatch_table.get(type(command))
+        if handler is None:
+            # No handler claims this Command class - silent no-op for now.
+            self._finalize_dispatch(command, command_id, None)
+            return command
+
+        module = handler.__self__  # type: ignore[union-attr]
+        error_occurred: Exception | None = None
 
         try:
-            for module in self._modules:
-                if module.can_handle(command):
-                    host_logger.debug(
-                        "Module %s handling command %s",
-                        module.metadata.name,
-                        command.name,
-                    )
-                    try:
-                        self._handle_with_retry(command, module)
-                    except Exception as e:
-                        error_occurred = e
-                        self._handle_dispatch_error(command, module, e)
+            host_logger.debug(
+                "Module %s handling command %s",
+                module.metadata.name,
+                command.name,
+            )
+            try:
+                self._handle_with_retry(command, handler)
+            except Exception as e:
+                error_occurred = e
+                self._handle_dispatch_error(command, module, e)
 
-                        if self._config.propagate_exceptions:
-                            raise CommandHandlingError(
-                                f"Handler error in {module.metadata.name}",
-                                command=command,
-                                module=module,
-                                original_error=e,
-                            ) from e
-                        break
+                if self._config.propagate_exceptions:
+                    raise CommandHandlingError(
+                        f"Handler error in {module.metadata.name}",
+                        command=command,
+                        module=module,
+                        original_error=e,
+                    ) from e
 
-                    if command.handled:
-                        host_logger.debug(
-                            "Command %s handled by %s",
-                            command.name,
-                            module.metadata.name,
-                        )
-                        break
+            if command.handled:
+                host_logger.debug(
+                    "Command %s handled by %s",
+                    command.name,
+                    module.metadata.name,
+                )
         finally:
             self._finalize_dispatch(command, command_id, error_occurred)
 
@@ -433,7 +497,7 @@ class ModuleHost:
 
         Raises:
             CommandHandlingError: If propagate_exceptions is True and
-                               a handler raises an exception.
+                               the handler raises an exception.
             RateLimitExceeded: If rate limit is exceeded.
             CircuitBreakerOpen: If circuit breaker is open.
         """
@@ -455,55 +519,60 @@ class ModuleHost:
 
         host_logger.debug("Dispatching command async: %s (id=%s)", command.name, command_id)
 
-        error_occurred = None
+        handler = self._dispatch_table.get(type(command))
+        if handler is None:
+            self._finalize_dispatch(command, command_id, None)
+            return command
+
+        module = handler.__self__  # type: ignore[union-attr]
+        error_occurred: Exception | None = None
 
         try:
-            for module in self._modules:
-                if module.can_handle(command):
-                    host_logger.debug(
-                        "Module %s handling command %s (async)",
-                        module.metadata.name,
-                        command.name,
-                    )
-                    try:
-                        await self._handle_with_retry_async(command, module)
-                    except Exception as e:
-                        error_occurred = e
-                        self._handle_dispatch_error(command, module, e)
+            host_logger.debug(
+                "Module %s handling command %s (async)",
+                module.metadata.name,
+                command.name,
+            )
+            try:
+                await self._handle_with_retry_async(command, handler)
+            except Exception as e:
+                error_occurred = e
+                self._handle_dispatch_error(command, module, e)
 
-                        if self._config.propagate_exceptions:
-                            raise CommandHandlingError(
-                                f"Handler error in {module.metadata.name}",
-                                command=command,
-                                module=module,
-                                original_error=e,
-                            ) from e
-                        break
+                if self._config.propagate_exceptions:
+                    raise CommandHandlingError(
+                        f"Handler error in {module.metadata.name}",
+                        command=command,
+                        module=module,
+                        original_error=e,
+                    ) from e
 
-                    if command.handled:
-                        host_logger.debug(
-                            "Command %s handled by %s (async)",
-                            command.name,
-                            module.metadata.name,
-                        )
-                        break
+            if command.handled:
+                host_logger.debug(
+                    "Command %s handled by %s (async)",
+                    command.name,
+                    module.metadata.name,
+                )
         finally:
             self._finalize_dispatch(command, command_id, error_occurred)
 
         return command
 
     async def _handle_with_retry_async(
-        self, command: Command, module: Module, attempt: int = 0
+        self,
+        command: Command,
+        handler: Callable[[Command], object],
+        attempt: int = 0,
     ) -> bool:
         """Handle command with retry logic (async version)."""
         try:
             # Check if handler is async
-            if inspect.iscoroutinefunction(module.handle):
-                await module.handle(command)
+            if inspect.iscoroutinefunction(handler):
+                await handler(command)
             else:
                 # Run sync handler in thread pool
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(self._executor, module.handle, command)
+                await loop.run_in_executor(self._executor, handler, command)
 
             # Record success with circuit breaker
             if self._config.circuit_breaker:
@@ -530,7 +599,7 @@ class ModuleHost:
                     e,
                 )
                 await asyncio.sleep(delay)
-                return await self._handle_with_retry_async(command, module, attempt + 1)
+                return await self._handle_with_retry_async(command, handler, attempt + 1)
 
             # No more retries, raise
             raise
@@ -581,3 +650,6 @@ class ModuleHost:
         # Shutdown executor
         self._executor.shutdown(wait=wait)
         host_logger.debug("ModuleHost shutdown complete")
+
+
+__all__ = ["ModuleHost"]

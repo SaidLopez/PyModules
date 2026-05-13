@@ -56,6 +56,18 @@ class ModuleRegistrationError(PyModulesError):
     pass
 
 
+class DuplicateCommandError(ModuleRegistrationError):
+    """
+    Raised when a Module's ``@handles`` claim collides with an
+    already-registered Module's claim.
+
+    Pass ``override=True`` to ``ModuleHost.register`` to permit deliberate
+    replacement (e.g., test doubles).
+    """
+
+    pass
+
+
 class ConfigurationError(PyModulesError):
     """Raised when configuration is invalid."""
 

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from pymodules import Command, CommandRequest, CommandResponse, Module, module
+from pymodules import Command, CommandRequest, CommandResponse, Module, handles, module
 
 
 class LogLevel(Enum):
@@ -70,13 +70,8 @@ class LoggingModule(Module):
         super().__init__()
         self.output = output or sys.stdout
 
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, LoggingCommand)
-
-    def handle(self, command: Command) -> None:
-        if not isinstance(command, LoggingCommand):
-            return
-
+    @handles(LoggingCommand)
+    def log(self, command: LoggingCommand) -> None:
         inp = command.input
         message = inp.message
         if inp.args:

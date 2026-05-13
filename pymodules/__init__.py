@@ -19,6 +19,7 @@ from .exceptions import (
     ConfigurationError,
     ConnectionError,
     DatabaseError,
+    DuplicateCommandError,
     ModuleRegistrationError,
     PyModulesError,
     RepositoryError,
@@ -26,7 +27,7 @@ from .exceptions import (
 from .host import ModuleHost
 from .interfaces import Command, CommandRequest, CommandResponse
 from .logging import configure_logging, get_logger
-from .module import Module, ModuleMetadata, module
+from .module import Module, ModuleMetadata, handles, module
 from .protocols import AsyncCommandHandler, CommandHandler, CommandLike
 from .resilience import (
     CircuitBreaker,
@@ -67,6 +68,7 @@ __all__ = [
     "module",
     "ModuleMetadata",
     "ModuleHost",
+    "handles",
     # Configuration
     "ModuleHostConfig",
     "Metrics",
@@ -74,6 +76,7 @@ __all__ = [
     "PyModulesError",
     "CommandHandlingError",
     "ModuleRegistrationError",
+    "DuplicateCommandError",
     "ConfigurationError",
     "DatabaseError",
     "ConnectionError",

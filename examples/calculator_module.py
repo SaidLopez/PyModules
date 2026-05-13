@@ -4,7 +4,7 @@ This is a calculator module as a simple example
 
 from dataclasses import dataclass
 
-from pymodules import Command, CommandRequest, CommandResponse, Module, module
+from pymodules import Command, CommandRequest, CommandResponse, Module, handles, module
 
 
 @dataclass
@@ -43,13 +43,8 @@ class CalculatorModule(Module):
         print(command.output.result)  # 3
     """
 
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, CalculatorCommand)
-
-    def handle(self, command: Command) -> None:
-        if not isinstance(command, CalculatorCommand):
-            return
-
+    @handles(CalculatorCommand)
+    def calculate(self, command: CalculatorCommand) -> None:
         inp = command.input
         if inp.operation == "+":
             result = inp.a + inp.b

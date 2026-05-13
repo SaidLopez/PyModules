@@ -14,6 +14,7 @@ from pymodules import (
     Module,
     ModuleHost,
     ModuleHostConfig,
+    handles,
     module,
 )
 
@@ -41,17 +42,14 @@ class AsyncModule(Module):
         super().__init__()
         self.call_count = 0
 
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, AsyncCommand)
-
-    async def handle(self, command: Command) -> None:
+    @handles(AsyncCommand)
+    async def handle_async(self, command: AsyncCommand) -> None:
         """Async handler that processes commands."""
-        if isinstance(command, AsyncCommand):
-            self.call_count += 1
-            if command.input.delay > 0:
-                await asyncio.sleep(command.input.delay)
-            command.output = AsyncOutput(result=f"async: {command.input.value}")
-            command.handled = True
+        self.call_count += 1
+        if command.input.delay > 0:
+            await asyncio.sleep(command.input.delay)
+        command.output = AsyncOutput(result=f"async: {command.input.value}")
+        command.handled = True
 
 
 @module(name="SyncModule")
@@ -62,14 +60,11 @@ class SyncModule(Module):
         super().__init__()
         self.call_count = 0
 
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, AsyncCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, AsyncCommand):
-            self.call_count += 1
-            command.output = AsyncOutput(result=f"sync: {command.input.value}")
-            command.handled = True
+    @handles(AsyncCommand)
+    def handle_sync(self, command: AsyncCommand) -> None:
+        self.call_count += 1
+        command.output = AsyncOutput(result=f"sync: {command.input.value}")
+        command.handled = True
 
 
 class TestAsyncHandlers:
@@ -199,10 +194,8 @@ class TestAsyncWithResilience:
 
         @module(name="FailingAsync")
         class FailingAsyncModule(Module):
-            def can_handle(self, command: Command) -> bool:
-                return isinstance(command, AsyncCommand)
-
-            async def handle(self, command: Command) -> None:
+            @handles(AsyncCommand)
+            async def fail(self, command: AsyncCommand) -> None:
                 raise ValueError("Async failure")
 
         host.register(FailingAsyncModule())
@@ -232,10 +225,8 @@ class TestAsyncWithResilience:
 
         @module(name="FlakyAsync")
         class FlakyAsyncModule(Module):
-            def can_handle(self, command: Command) -> bool:
-                return isinstance(command, AsyncCommand)
-
-            async def handle(self, command: Command) -> None:
+            @handles(AsyncCommand)
+            async def flaky(self, command: AsyncCommand) -> None:
                 nonlocal call_count
                 call_count += 1
                 if call_count < 3:
@@ -261,20 +252,21 @@ class TestAsyncLoopReuse:
         """Verify dispatch_async reuses the same asyncio loop for async handlers."""
         loop_ids = []
 
+        class TrackCommand(Command[CommandRequest, CommandResponse]):
+            name = "track"
+
         @module(name="LoopTracker")
         class LoopTrackerModule(Module):
-            def can_handle(self, command):
-                return command.name == "track"
-
-            async def handle(self, command):
+            @handles(TrackCommand)
+            async def track(self, command: TrackCommand) -> None:
                 loop_ids.append(id(asyncio.get_running_loop()))
                 command.handled = True
 
         host = ModuleHost()
         host.register(LoopTrackerModule())
 
-        command1 = Command(name="track", input=CommandRequest())
-        command2 = Command(name="track", input=CommandRequest())
+        command1 = TrackCommand(input=CommandRequest())
+        command2 = TrackCommand(input=CommandRequest())
 
         await host.dispatch_async(command1)
         await host.dispatch_async(command2)
@@ -286,12 +278,13 @@ class TestAsyncLoopReuse:
         """Verify sync dispatch uses asyncio.run for async handlers (no nested loops)."""
         call_count = 0
 
+        class CountCommand(Command[CommandRequest, CommandResponse]):
+            name = "count"
+
         @module(name="AsyncCounter")
         class AsyncCounterModule(Module):
-            def can_handle(self, command):
-                return command.name == "count"
-
-            async def handle(self, command):
+            @handles(CountCommand)
+            async def count(self, command: CountCommand) -> None:
                 nonlocal call_count
                 call_count += 1
                 command.handled = True
@@ -300,8 +293,8 @@ class TestAsyncLoopReuse:
         host.register(AsyncCounterModule())
 
         # Multiple sync calls with async handlers should work without issues
-        command1 = Command(name="count", input=CommandRequest())
-        command2 = Command(name="count", input=CommandRequest())
+        command1 = CountCommand(input=CommandRequest())
+        command2 = CountCommand(input=CommandRequest())
 
         host.dispatch(command1)
         host.dispatch(command2)

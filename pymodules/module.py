@@ -1,20 +1,58 @@
 """
 Module base class for PyModules.
 
-Modules are command handlers that declare which commands they can process.
-They are registered with a ModuleHost and receive commands through the
-can_handle/handle pattern.
+Modules are command handlers whose methods are individually decorated with
+``@handles(CommandClass)`` to claim Commands. ``ModuleHost`` scans each
+registered Module's class at registration time and builds a
+``{CommandClass -> bound method}`` dispatch table.
+
+There is no ``can_handle`` predicate. Routing is type-only. Conditional
+handling is expressed by splitting the Command into narrower classes or
+branching inside the handler body.
 """
 
-from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
-
-from .interfaces import Command
+from typing import TYPE_CHECKING, Optional, TypeVar
 
 if TYPE_CHECKING:
     from .host import ModuleHost
+
+
+F = TypeVar("F", bound=Callable[..., object])
+
+
+# Marker attribute name written onto decorated methods by ``@handles``.
+# Read by ``ModuleHost.register`` when building the dispatch table.
+HANDLES_ATTR = "__pymodules_handles__"
+
+
+def handles(*commands: type) -> Callable[[F], F]:
+    """
+    Decorator marking a Module method as the handler for one or more Command classes.
+
+    The decorator stores the claimed Command classes as a tuple on the
+    function under ``__pymodules_handles__``. ``ModuleHost.register`` reads
+    that marker to build the dispatch table.
+
+    Most usages claim a single Command class. ``@handles(CmdA, CmdB)`` is
+    permitted for the rare case of a method that handles multiple types.
+
+    Example:
+        class GreeterModule(Module):
+            @handles(GreetCommand)
+            def greet(self, command: GreetCommand) -> None:
+                command.output = GreetOutput(message=f"Hello, {command.input.name}!")
+                command.handled = True
+    """
+    if not commands:
+        raise TypeError("@handles requires at least one Command class")
+
+    def decorator(func: F) -> F:
+        setattr(func, HANDLES_ATTR, tuple(commands))
+        return func
+
+    return decorator
 
 
 @dataclass
@@ -46,29 +84,23 @@ def module(name: str = "", description: str = "", version: str = "1.0.0") -> Cal
     return decorator
 
 
-class Module(ABC):
+class Module:
     """
-    Abstract base class for command handler modules.
+    Base class for command handler modules.
 
-    Subclass this to create a module that handles specific command types.
-    Override can_handle() to declare which commands you support, and
-    handle() to process those commands.
-
-    Each module has access to its host via the `host` property,
-    allowing it to dispatch commands to other modules.
+    Subclass this and decorate methods with ``@handles(CommandClass)`` to
+    claim Commands. Each module has access to its host via the ``host``
+    property, allowing it to dispatch commands to other modules.
 
     Example:
         @module(name="Greeter", description="Handles greeting commands")
         class GreeterModule(Module):
-            def can_handle(self, command: Command) -> bool:
-                return isinstance(command, GreetCommand)
-
-            def handle(self, command: Command) -> None:
-                if isinstance(command, GreetCommand):
-                    command.output = GreetResponse(
-                        message=f"Hello, {command.input.name}!"
-                    )
-                    command.handled = True
+            @handles(GreetCommand)
+            def greet(self, command: GreetCommand) -> None:
+                command.output = GreetOutput(
+                    message=f"Hello, {command.input.name}!"
+                )
+                command.handled = True
     """
 
     _module_metadata: ModuleMetadata = ModuleMetadata()
@@ -89,36 +121,6 @@ class Module(ABC):
         """Module metadata (name, description, version)."""
         return self.__class__._module_metadata
 
-    @abstractmethod
-    def can_handle(self, command: Command) -> bool:
-        """
-        Return True if this module can handle the given command.
-
-        This is called by ModuleHost before handle() to determine
-        if this module should process the command.
-
-        Args:
-            command: The command to check
-
-        Returns:
-            True if this module can handle the command
-        """
-        pass
-
-    @abstractmethod
-    def handle(self, command: Command) -> None:
-        """
-        Process the command.
-
-        Set command.output with the response and command.handled = True
-        to indicate successful processing. If handled is True,
-        no other modules will receive this command.
-
-        Args:
-            command: The command to handle
-        """
-        pass
-
     def on_load(self) -> None:
         """Called when the module is loaded into a host."""
         pass
@@ -126,3 +128,12 @@ class Module(ABC):
     def on_unload(self) -> None:
         """Called when the module is unloaded from a host."""
         pass
+
+
+__all__ = [
+    "HANDLES_ATTR",
+    "Module",
+    "ModuleMetadata",
+    "handles",
+    "module",
+]

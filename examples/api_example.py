@@ -26,6 +26,7 @@ from pymodules import (
     CommandResponse,
     Module,
     ModuleHost,
+    handles,
     module,
 )
 from pymodules.contrib.api import (
@@ -177,80 +178,82 @@ _next_id = 1
 class ProductModule(Module):
     """Module that handles all product-related commands."""
 
-    def can_handle(self, command: Command) -> bool:
-        """Check if this module handles the command."""
-        return isinstance(command, (CreateProduct, GetProduct, ListProducts, SearchProducts))
-
-    async def handle(self, command: Command) -> None:
-        """Handle product commands."""
+    @handles(CreateProduct)
+    async def create_product(self, command: CreateProduct) -> None:
+        """Handle product creation."""
         global _next_id
 
-        if isinstance(command, CreateProduct):
-            product_id = str(_next_id)
-            _next_id += 1
+        product_id = str(_next_id)
+        _next_id += 1
 
-            product = {
-                "id": product_id,
-                "name": command.input.name,
-                "price": command.input.price,
-                "description": command.input.description,
-            }
-            _products[product_id] = product
+        product = {
+            "id": product_id,
+            "name": command.input.name,
+            "price": command.input.price,
+            "description": command.input.description,
+        }
+        _products[product_id] = product
 
-            command.output = CreateProductOutput(
-                id=product_id,
-                name=product["name"],
-                price=product["price"],
-            )
-            command.handled = True
+        command.output = CreateProductOutput(
+            id=product_id,
+            name=product["name"],
+            price=product["price"],
+        )
+        command.handled = True
 
-        elif isinstance(command, GetProduct):
-            product = _products.get(command.input.product_id)
-            if not product:
-                raise ValueError(f"Product {command.input.product_id} not found")
+    @handles(GetProduct)
+    async def get_product(self, command: GetProduct) -> None:
+        """Handle getting a single product."""
+        product = _products.get(command.input.product_id)
+        if not product:
+            raise ValueError(f"Product {command.input.product_id} not found")
 
-            command.output = GetProductOutput(
-                id=product["id"],
-                name=product["name"],
-                price=product["price"],
-                description=product["description"],
-            )
-            command.handled = True
+        command.output = GetProductOutput(
+            id=product["id"],
+            name=product["name"],
+            price=product["price"],
+            description=product["description"],
+        )
+        command.handled = True
 
-        elif isinstance(command, ListProducts):
-            all_products = list(_products.values())
-            start = command.input.offset
-            end = start + command.input.limit
-            page = all_products[start:end]
+    @handles(ListProducts)
+    async def list_products(self, command: ListProducts) -> None:
+        """Handle product listing."""
+        all_products = list(_products.values())
+        start = command.input.offset
+        end = start + command.input.limit
+        page = all_products[start:end]
 
-            command.output = ListProductsOutput(
-                products=page,
-                total=len(all_products),
-            )
-            command.handled = True
+        command.output = ListProductsOutput(
+            products=page,
+            total=len(all_products),
+        )
+        command.handled = True
 
-        elif isinstance(command, SearchProducts):
-            query = command.input.query.lower()
-            results = []
+    @handles(SearchProducts)
+    async def search_products(self, command: SearchProducts) -> None:
+        """Handle product search with name and price filters."""
+        query = command.input.query.lower()
+        results = []
 
-            for product in _products.values():
-                # Name match
-                if query not in product["name"].lower():
-                    continue
+        for product in _products.values():
+            # Name match
+            if query not in product["name"].lower():
+                continue
 
-                # Price filters
-                if command.input.min_price and product["price"] < command.input.min_price:
-                    continue
-                if command.input.max_price and product["price"] > command.input.max_price:
-                    continue
+            # Price filters
+            if command.input.min_price and product["price"] < command.input.min_price:
+                continue
+            if command.input.max_price and product["price"] > command.input.max_price:
+                continue
 
-                results.append(product)
+            results.append(product)
 
-            command.output = SearchProductsOutput(
-                products=results,
-                total=len(results),
-            )
-            command.handled = True
+        command.output = SearchProductsOutput(
+            products=results,
+            total=len(results),
+        )
+        command.handled = True
 
 
 # =============================================================================

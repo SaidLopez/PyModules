@@ -16,6 +16,7 @@ from pymodules import (
     CommandResponse,
     Module,
     ModuleHost,
+    handles,
     module,
 )
 from pymodules.contrib.db.mixins import UUIDType
@@ -141,59 +142,64 @@ async def full_stack_setup(tmp_path):
         def __init__(self, repo):
             self.repo = repo
 
-        def can_handle(self, command):
-            return isinstance(command, (CreateUser, GetUser, ListUsers, UpdateUser, DeleteUser))
+        @handles(CreateUser)
+        async def create_user(self, command: CreateUser) -> None:
+            user = await self.repo.create(
+                name=command.input.name,
+                email=command.input.email,
+            )
+            command.output = CreateUserOutput(
+                id=str(user.id),
+                name=user.name,
+                email=user.email,
+            )
+            command.handled = True
 
-        async def handle(self, command):
-            if isinstance(command, CreateUser):
-                user = await self.repo.create(
-                    name=command.input.name,
-                    email=command.input.email,
-                )
-                command.output = CreateUserOutput(
-                    id=str(user.id),
-                    name=user.name,
-                    email=user.email,
-                )
-                command.handled = True
-            elif isinstance(command, GetUser):
-                user = await self.repo.get_by_id(UUID(command.input.id))
-                if not user:
-                    raise ValueError("User not found")
-                command.output = GetUserOutput(
-                    id=str(user.id),
-                    name=user.name,
-                    email=user.email,
-                )
-                command.handled = True
-            elif isinstance(command, ListUsers):
-                users = await self.repo.get_all(
-                    limit=command.input.limit,
-                    offset=command.input.offset,
-                )
-                total = await self.repo.count()
-                command.output = ListUsersOutput(
-                    users=[{"id": str(u.id), "name": u.name} for u in users],
-                    total=total,
-                )
-                command.handled = True
-            elif isinstance(command, UpdateUser):
-                updates = {}
-                if command.input.name:
-                    updates["name"] = command.input.name
-                if command.input.email:
-                    updates["email"] = command.input.email
-                user = await self.repo.update(UUID(command.input.id), **updates)
-                command.output = UpdateUserOutput(
-                    id=str(user.id),
-                    name=user.name,
-                    email=user.email,
-                )
-                command.handled = True
-            elif isinstance(command, DeleteUser):
-                result = await self.repo.delete(UUID(command.input.id))
-                command.output = DeleteUserOutput(success=result)
-                command.handled = True
+        @handles(GetUser)
+        async def get_user(self, command: GetUser) -> None:
+            user = await self.repo.get_by_id(UUID(command.input.id))
+            if not user:
+                raise ValueError("User not found")
+            command.output = GetUserOutput(
+                id=str(user.id),
+                name=user.name,
+                email=user.email,
+            )
+            command.handled = True
+
+        @handles(ListUsers)
+        async def list_users(self, command: ListUsers) -> None:
+            users = await self.repo.get_all(
+                limit=command.input.limit,
+                offset=command.input.offset,
+            )
+            total = await self.repo.count()
+            command.output = ListUsersOutput(
+                users=[{"id": str(u.id), "name": u.name} for u in users],
+                total=total,
+            )
+            command.handled = True
+
+        @handles(UpdateUser)
+        async def update_user(self, command: UpdateUser) -> None:
+            updates = {}
+            if command.input.name:
+                updates["name"] = command.input.name
+            if command.input.email:
+                updates["email"] = command.input.email
+            user = await self.repo.update(UUID(command.input.id), **updates)
+            command.output = UpdateUserOutput(
+                id=str(user.id),
+                name=user.name,
+                email=user.email,
+            )
+            command.handled = True
+
+        @handles(DeleteUser)
+        async def delete_user(self, command: DeleteUser) -> None:
+            result = await self.repo.delete(UUID(command.input.id))
+            command.output = DeleteUserOutput(success=result)
+            command.handled = True
 
     # Set up host
     host = ModuleHost()

@@ -22,6 +22,7 @@ from pymodules import (
     RateLimiter,
     RateLimitExceeded,
     RetryPolicy,
+    handles,
     module,
 )
 
@@ -47,16 +48,13 @@ class FailingModule(Module):
         super().__init__()
         self.call_count = 0
 
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, TestCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, TestCommand):
-            self.call_count += 1
-            if command.input.should_fail:
-                raise ValueError("Intentional failure")
-            command.output = TestOutput(result=f"processed: {command.input.value}")
-            command.handled = True
+    @handles(TestCommand)
+    def handle_test(self, command: TestCommand) -> None:
+        self.call_count += 1
+        if command.input.should_fail:
+            raise ValueError("Intentional failure")
+        command.output = TestOutput(result=f"processed: {command.input.value}")
+        command.handled = True
 
 
 class TestRateLimiter:

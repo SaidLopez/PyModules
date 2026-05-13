@@ -7,7 +7,7 @@ strongly typed request and response dataclasses.
 
 from dataclasses import dataclass
 
-from pymodules import Command, CommandRequest, CommandResponse, Module, module
+from pymodules import Command, CommandRequest, CommandResponse, Module, handles, module
 
 
 @dataclass
@@ -45,13 +45,8 @@ class GreeterModule(Module):
         print(command.output.message)  # "Hello, Alice!"
     """
 
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, GreetCommand)
-
-    def handle(self, command: Command) -> None:
-        if not isinstance(command, GreetCommand):
-            return
-
+    @handles(GreetCommand)
+    def greet(self, command: GreetCommand) -> None:
         inp = command.input
         if inp.formal:
             message = f"Good day, {inp.name}. How may I assist you?"

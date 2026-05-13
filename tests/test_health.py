@@ -11,6 +11,7 @@ from pymodules import (
     Module,
     ModuleHost,
     ModuleHostConfig,
+    handles,
     module,
 )
 from pymodules.contrib.health import (
@@ -38,13 +39,10 @@ class HealthCommand(Command[HealthInput, HealthOutput]):
 
 @module(name="HealthModule")
 class HealthModule(Module):
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, HealthCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, HealthCommand):
-            command.output = HealthOutput(result="healthy")
-            command.handled = True
+    @handles(HealthCommand)
+    def handle_health(self, command: HealthCommand) -> None:
+        command.output = HealthOutput(result="healthy")
+        command.handled = True
 
 
 class TestHealthCheckResult:

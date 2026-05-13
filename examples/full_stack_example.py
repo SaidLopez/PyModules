@@ -26,6 +26,7 @@ from pymodules import (
     CommandResponse,
     Module,
     ModuleHost,
+    handles,
     module,
 )
 from pymodules.contrib.api import ModuleRouter, api_endpoint, register_error_handlers
@@ -238,28 +239,7 @@ class TaskModule(Module):
         """Initialize with a task repository."""
         self.repo = repository
 
-    def can_handle(self, command: Command) -> bool:
-        """Check if this module handles the command."""
-        return isinstance(
-            command,
-            (CreateTask, GetTask, ListTasks, UpdateTask, DeleteTask, CompleteTask),
-        )
-
-    async def handle(self, command: Command) -> None:
-        """Handle task commands with database operations."""
-        if isinstance(command, CreateTask):
-            await self._handle_create(command)
-        elif isinstance(command, GetTask):
-            await self._handle_get(command)
-        elif isinstance(command, ListTasks):
-            await self._handle_list(command)
-        elif isinstance(command, UpdateTask):
-            await self._handle_update(command)
-        elif isinstance(command, DeleteTask):
-            await self._handle_delete(command)
-        elif isinstance(command, CompleteTask):
-            await self._handle_complete(command)
-
+    @handles(CreateTask)
     async def _handle_create(self, command: CreateTask) -> None:
         """Handle task creation."""
         task = await self.repo.create(
@@ -274,6 +254,7 @@ class TaskModule(Module):
         )
         command.handled = True
 
+    @handles(GetTask)
     async def _handle_get(self, command: GetTask) -> None:
         """Handle getting a single task."""
         task = await self.repo.get_by_id(UUID(command.input.task_id))
@@ -290,6 +271,7 @@ class TaskModule(Module):
         )
         command.handled = True
 
+    @handles(ListTasks)
     async def _handle_list(self, command: ListTasks) -> None:
         """Handle listing tasks."""
         tasks = await self.repo.get_all(
@@ -313,6 +295,7 @@ class TaskModule(Module):
         )
         command.handled = True
 
+    @handles(UpdateTask)
     async def _handle_update(self, command: UpdateTask) -> None:
         """Handle task update."""
         updates = {}
@@ -335,6 +318,7 @@ class TaskModule(Module):
         )
         command.handled = True
 
+    @handles(DeleteTask)
     async def _handle_delete(self, command: DeleteTask) -> None:
         """Handle task deletion."""
         task_id = UUID(command.input.task_id)
@@ -350,6 +334,7 @@ class TaskModule(Module):
         command.output = DeleteTaskOutput(success=success, message=message)
         command.handled = True
 
+    @handles(CompleteTask)
     async def _handle_complete(self, command: CompleteTask) -> None:
         """Handle marking a task as completed."""
         task = await self.repo.update(

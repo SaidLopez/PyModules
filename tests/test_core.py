@@ -10,8 +10,10 @@ from pymodules import (
     Command,
     CommandRequest,
     CommandResponse,
+    DuplicateCommandError,
     Module,
     ModuleHost,
+    handles,
     module,
 )
 
@@ -38,14 +40,11 @@ class SampleModule(Module):
         super().__init__()
         self.handle_count = 0
 
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, SampleCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, SampleCommand):
-            self.handle_count += 1
-            command.output = SampleOutput(result=f"processed: {command.input.value}")
-            command.handled = True
+    @handles(SampleCommand)
+    def handle_sample(self, command: SampleCommand) -> None:
+        self.handle_count += 1
+        command.output = SampleOutput(result=f"processed: {command.input.value}")
+        command.handled = True
 
 
 class UnhandledCommand(Command[SampleInput, SampleOutput]):
@@ -90,16 +89,6 @@ class TestModuleClass:
     def test_module_host_initially_none(self):
         mod = SampleModule()
         assert mod.host is None
-
-    def test_module_can_handle(self):
-        mod = SampleModule()
-        command = SampleCommand(input=SampleInput())
-        assert mod.can_handle(command) is True
-
-    def test_module_cannot_handle_different_command(self):
-        mod = SampleModule()
-        command = UnhandledCommand(input=SampleInput())
-        assert mod.can_handle(command) is False
 
 
 class TestModuleHostClass:
@@ -147,7 +136,8 @@ class TestModuleHostClass:
         assert command.handled is False
         assert command.output is None
 
-    def test_can_handle(self):
+    def test_host_can_handle_reflects_dispatch_table(self):
+        """host.can_handle returns True for claimed Command classes."""
         host = ModuleHost()
         mod = SampleModule()
         host.register(mod)
@@ -176,29 +166,49 @@ class TestModuleHostClass:
         mod1 = SampleModule()
         mod2 = SampleModule()
 
-        result = host.register(mod1).register(mod2)
+        # Second module claims same Command class -> use override=True.
+        result = host.register(mod1).register(mod2, override=True)
 
         assert result is host
         assert len(host.modules) == 2
 
 
-class TestMultipleModules:
-    """Tests for multiple module handling."""
+class TestDuplicateClaimGuard:
+    """Tests for the type-routed registry's duplicate-claim guard."""
 
-    def test_first_handler_wins(self):
-        """When multiple modules can handle, only first gets the command."""
+    def test_duplicate_claim_raises(self):
+        """Registering two modules that claim the same Command class raises."""
+        host = ModuleHost()
+        host.register(SampleModule())
+
+        with pytest.raises(DuplicateCommandError):
+            host.register(SampleModule())
+
+    def test_override_true_replaces_handler(self):
+        """register(..., override=True) silently replaces the previous claim."""
         host = ModuleHost()
         mod1 = SampleModule()
         mod2 = SampleModule()
         host.register(mod1)
-        host.register(mod2)
+        host.register(mod2, override=True)
 
         command = SampleCommand(input=SampleInput(value="test"))
         host.dispatch(command)
 
-        # First module handles, second should not
-        assert mod1.handle_count == 1
-        assert mod2.handle_count == 0
+        # The second module wins after override.
+        assert mod2.handle_count == 1
+        assert mod1.handle_count == 0
+
+    def test_unregister_clears_dispatch_table(self):
+        """Unregistering a module removes its dispatch table entries."""
+        host = ModuleHost()
+        mod = SampleModule()
+        host.register(mod)
+
+        host.unregister(mod)
+
+        # Re-registering a new instance must not raise.
+        host.register(SampleModule())
 
     def test_module_can_dispatch_to_host(self):
         """Modules can dispatch commands through their host."""

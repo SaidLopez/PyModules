@@ -20,6 +20,7 @@ from pymodules import (
     generate_id,
     get_correlation_id,
     get_tracer,
+    handles,
     inject_trace_context,
     module,
     set_tracer,
@@ -42,13 +43,10 @@ class TracingCommand(Command[TracingInput, TracingOutput]):
 
 @module(name="TracingModule")
 class TracingModule(Module):
-    def can_handle(self, command: Command) -> bool:
-        return isinstance(command, TracingCommand)
-
-    def handle(self, command: Command) -> None:
-        if isinstance(command, TracingCommand):
-            command.output = TracingOutput(result=f"traced: {command.input.value}")
-            command.handled = True
+    @handles(TracingCommand)
+    def handle_tracing(self, command: TracingCommand) -> None:
+        command.output = TracingOutput(result=f"traced: {command.input.value}")
+        command.handled = True
 
 
 class TestGenerateId:
