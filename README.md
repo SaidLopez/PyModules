@@ -1,8 +1,8 @@
 # PyModules
 
-An event-driven modular architecture for Python, inspired by [NetModules](https://github.com/netmodules/NetModules).
+A command-dispatch modular architecture for Python, inspired by [NetModules](https://github.com/netmodules/NetModules).
 
-Build scalable, production-ready applications where components communicate through typed events — like **lego blocks** that snap together.
+Build scalable, production-ready applications where components communicate through typed commands — like **lego blocks** that snap together.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -10,7 +10,7 @@ Build scalable, production-ready applications where components communicate throu
 
 ## Features
 
-- **Event-Driven Architecture** — Loose coupling through typed events
+- **Command Dispatch** — Loose coupling through typed in-process commands
 - **Production Ready** — Rate limiting, circuit breaker, retry, health checks
 - **Distributed Tracing** — Correlation IDs and OpenTelemetry support
 - **FastAPI Integration** — Auto-generated REST endpoints with health/metrics
@@ -22,22 +22,18 @@ Build scalable, production-ready applications where components communicate throu
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              ModuleHost                                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │ Rate Limiter│  │Circuit Break│  │ Retry Policy│  │    DLQ      │        │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘        │
 │                                                                              │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                         Event Dispatcher                              │  │
+│  │                       Middleware Chain                                │  │
 │  │                                                                       │  │
-│  │   Event ──► can_handle? ──► Module A ──► handled? ──► Response       │  │
-│  │                  │                           │                        │  │
-│  │                  ▼                           ▼                        │  │
-│  │             Module B                    Module C                      │  │
+│  │   Command ─► RateLimit ─► CircuitBreaker ─► Retry ─► DLQ ─►          │  │
+│  │              Tracing ─► Metrics ─► Terminal ─► Module.@handles ─►    │  │
+│  │              Response                                                 │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 │                                                                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                         │
-│  │   Metrics   │  │   Tracing   │  │Health Check │                         │
-│  └─────────────┘  └─────────────┘  └─────────────┘                         │
+│  Each middleware is opt-in. The terminal looks up type(command) in the      │
+│  dispatch table built from each Module's @handles(...) claims and invokes   │
+│  the bound handler; the handler returns its typed CommandResponse.          │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -45,9 +41,9 @@ Build scalable, production-ready applications where components communicate throu
 
 | Concept | Description |
 |---------|-------------|
-| **Event** | A typed message with `Input` data and `Output` response |
-| **Module** | A handler that declares what events it can process |
-| **ModuleHost** | Central dispatcher that routes events to modules |
+| **Command** | A typed in-process message with a `CommandRequest` payload, dispatched to exactly one handler that returns a `CommandResponse` |
+| **Module** | A class whose `@handles(CommandClass)`-decorated methods claim Commands |
+| **ModuleHost** | Central dispatcher that routes Commands by type to the claiming Module's handler, threading them through a configurable middleware chain |
 
 ## Installation
 
@@ -75,40 +71,34 @@ pip install pymodules[full]
 
 ## Quick Start
 
-### 1. Define Events
+### 1. Define a Command
 
 ```python
 from dataclasses import dataclass
-from pymodules import Event, EventInput, EventOutput
+from pymodules import Command, CommandRequest, CommandResponse
 
 @dataclass
-class GreetInput(EventInput):
+class GreetRequest(CommandRequest):
     name: str = "World"
 
 @dataclass
-class GreetOutput(EventOutput):
+class GreetResponse(CommandResponse):
     message: str = ""
 
-class GreetEvent(Event[GreetInput, GreetOutput]):
+class GreetCommand(Command[GreetRequest, GreetResponse]):
     name = "myapp.greet"
 ```
 
 ### 2. Create a Module
 
 ```python
-from pymodules import Module, module, Event
+from pymodules import Module, handles, module
 
-@module(name="Greeter", description="Handles greeting events")
+@module(name="Greeter", description="Handles greeting commands")
 class GreeterModule(Module):
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, GreetEvent)
-
-    def handle(self, event: Event) -> None:
-        if isinstance(event, GreetEvent):
-            event.output = GreetOutput(
-                message=f"Hello, {event.input.name}!"
-            )
-            event.handled = True
+    @handles(GreetCommand)
+    def greet(self, command: GreetCommand) -> GreetResponse:
+        return GreetResponse(message=f"Hello, {command.request.name}!")
 ```
 
 ### 3. Use with ModuleHost
@@ -120,25 +110,31 @@ from pymodules import ModuleHost
 host = ModuleHost()
 host.register(GreeterModule())
 
-# Dispatch event
-event = GreetEvent(input=GreetInput(name="Alice"))
-host.handle(event)
+# Dispatch a command and read its return value
+response = host.dispatch(GreetCommand(request=GreetRequest(name="Alice")))
 
-print(event.output.message)  # "Hello, Alice!"
+print(response.message)  # "Hello, Alice!"
 ```
 
 ## Production Configuration
 
 ### Basic Configuration
 
+`ModuleHostConfig` holds host-level settings plus an ordered `middleware`
+list. Resilience and observability are middleware — opt them in with
+`default_middleware(...)` or build the list explicitly.
+
 ```python
 from pymodules import ModuleHost, ModuleHostConfig
+from pymodules.resilience import default_middleware
 
 config = ModuleHostConfig(
-    max_workers=8,              # Thread pool size
-    propagate_exceptions=False, # Don't crash on handler errors
-    enable_metrics=True,        # Enable metrics collection
-    enable_tracing=True,        # Enable distributed tracing
+    max_workers=8,                  # Thread pool size for sync handlers
+    propagate_exceptions=False,     # Don't re-raise handler errors
+    middleware=default_middleware(
+        enable_metrics=True,        # Add MetricsMiddleware
+        enable_tracing=True,        # Add TracingMiddleware
+    ),
 )
 
 host = ModuleHost(config=config)
@@ -149,12 +145,15 @@ host = ModuleHost(config=config)
 Configure via environment for containerized deployments:
 
 ```bash
+# Host-level settings (ModuleHostConfig.from_env)
 export PYMODULES_MAX_WORKERS=8
 export PYMODULES_PROPAGATE_EXCEPTIONS=false
 export PYMODULES_LOG_LEVEL=INFO
+
+# Middleware chain settings (default_middleware_from_env)
 export PYMODULES_ENABLE_METRICS=true
 export PYMODULES_ENABLE_TRACING=true
-export PYMODULES_RATE_LIMIT=100          # Events per second
+export PYMODULES_RATE_LIMIT=100          # Commands per second
 export PYMODULES_RATE_LIMIT_BURST=10
 export PYMODULES_CIRCUIT_BREAKER_THRESHOLD=5
 export PYMODULES_RETRY_MAX=3
@@ -162,8 +161,13 @@ export PYMODULES_DLQ_SIZE=1000
 ```
 
 ```python
-# Load config from environment
+from pymodules import ModuleHost, ModuleHostConfig
+from pymodules.resilience import default_middleware_from_env
+
+# Host settings come from PYMODULES_MAX_WORKERS / PROPAGATE_EXCEPTIONS / LOG_LEVEL;
+# the middleware chain is owned by default_middleware_from_env.
 config = ModuleHostConfig.from_env()
+config.middleware = default_middleware_from_env()
 host = ModuleHost(config=config)
 ```
 
@@ -171,18 +175,19 @@ host = ModuleHost(config=config)
 
 ### Rate Limiting
 
-Prevent event flooding with token bucket algorithm:
+Prevent command flooding with the token bucket algorithm:
 
 ```python
-from pymodules import ModuleHost, ModuleHostConfig
-from pymodules.resilience import RateLimiter
+from pymodules import ModuleHost, ModuleHostConfig, RateLimitMiddleware
 
 config = ModuleHostConfig(
-    rate_limiter=RateLimiter(
-        rate=100,    # 100 events per second
-        burst=10,    # Allow bursts up to 10
-        block=False  # Raise RateLimitExceeded instead of blocking
-    )
+    middleware=[
+        RateLimitMiddleware(
+            rate=100,    # 100 commands per second
+            burst=10,    # Allow bursts up to 10
+            block=False, # Raise RateLimitExceeded instead of blocking
+        ),
+    ],
 )
 
 host = ModuleHost(config=config)
@@ -193,15 +198,14 @@ host = ModuleHost(config=config)
 Prevent cascading failures:
 
 ```python
-from pymodules.resilience import CircuitBreaker
+from pymodules import CircuitBreaker, CircuitBreakerMiddleware, ModuleHostConfig
 
-config = ModuleHostConfig(
-    circuit_breaker=CircuitBreaker(
-        failure_threshold=5,   # Open after 5 failures
-        recovery_timeout=30,   # Try again after 30 seconds
-        success_threshold=2    # Close after 2 successes
-    )
+breaker = CircuitBreaker(
+    failure_threshold=5,   # Open after 5 failures
+    recovery_timeout=30,   # Try again after 30 seconds
+    success_threshold=2,   # Close after 2 successes
 )
+config = ModuleHostConfig(middleware=[CircuitBreakerMiddleware(breaker)])
 ```
 
 Circuit breaker states:
@@ -212,40 +216,38 @@ Circuit breaker states:
 ### Retry with Exponential Backoff
 
 ```python
-from pymodules.resilience import RetryPolicy
+from pymodules import ModuleHostConfig, RetryMiddleware, RetryPolicy
 
-config = ModuleHostConfig(
-    retry_policy=RetryPolicy(
-        max_retries=3,
-        base_delay=1.0,       # Start with 1 second
-        max_delay=60.0,       # Cap at 60 seconds
-        exponential_base=2.0  # Double each retry
-    )
+policy = RetryPolicy(
+    max_retries=3,
+    base_delay=1.0,       # Start with 1 second
+    max_delay=60.0,       # Cap at 60 seconds
+    exponential_base=2.0, # Double each retry
 )
+config = ModuleHostConfig(middleware=[RetryMiddleware(policy)])
 ```
 
 ### Dead Letter Queue
 
-Capture failed events for later inspection:
+Capture failed commands for later inspection:
 
 ```python
-from pymodules.resilience import DeadLetterQueue
+from pymodules import DeadLetterQueue, DLQMiddleware, ModuleHostConfig, ModuleHost
 
 dlq = DeadLetterQueue(max_size=1000)
 
 config = ModuleHostConfig(
-    dead_letter_queue=dlq,
-    propagate_exceptions=False
+    middleware=[DLQMiddleware(dlq, propagate_exceptions=False)],
+    propagate_exceptions=False,
 )
-
 host = ModuleHost(config=config)
 
 # Later, inspect failures
 for entry in dlq.entries:
-    print(f"Failed: {entry.event.name} - {entry.error}")
+    print(f"Failed: {entry.command.name} - {entry.error}")
 
-# Reprocess failed events
-successful, failed = dlq.reprocess(host.handle)
+# Reprocess failed commands by re-dispatching them through the host
+successful, failed = dlq.reprocess(host.dispatch)
 ```
 
 ### Fallback / Graceful Degradation
@@ -267,22 +269,26 @@ def get_user_data():
 
 ### Correlation IDs
 
-Every event automatically gets a correlation ID when tracing is enabled:
+Every command automatically gets a correlation ID when `TracingMiddleware`
+is in the chain:
 
 ```python
-config = ModuleHostConfig(enable_tracing=True)
+from pymodules import ModuleHost, ModuleHostConfig
+from pymodules.resilience import default_middleware
+
+config = ModuleHostConfig(middleware=default_middleware(enable_tracing=True))
 host = ModuleHost(config=config)
 
-event = GreetEvent(input=GreetInput(name="Alice"))
-host.handle(event)
+command = GreetCommand(request=GreetRequest(name="Alice"))
+response = host.dispatch(command)
 
-print(event.meta["correlation_id"])  # "a1b2c3d4e5f6..."
+print(command.meta["correlation_id"])  # "a1b2c3d4e5f6..."
 ```
 
 ### Manual Tracing
 
 ```python
-from pymodules.tracing import Tracer, get_tracer, set_tracer
+from pymodules import Tracer, get_tracer, set_tracer
 
 tracer = Tracer(service_name="my-service")
 set_tracer(tracer)
@@ -303,7 +309,8 @@ print(ctx.to_dict())
 ```python
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from pymodules.tracing import Tracer, OpenTelemetryExporter
+from pymodules import Tracer
+from pymodules.contrib.tracing.opentelemetry import OpenTelemetryExporter
 
 # Set up OpenTelemetry
 trace.set_tracer_provider(TracerProvider())
@@ -321,7 +328,7 @@ Kubernetes-compatible liveness and readiness probes:
 
 ```python
 from pymodules import ModuleHost
-from pymodules.health import HealthCheck, HealthStatus
+from pymodules.contrib.health import HealthCheck, HealthStatus
 
 host = ModuleHost()
 host.register(MyModule())
@@ -344,7 +351,11 @@ readiness = health.readiness() # Can it serve traffic?
 ### Built-in Check Helpers
 
 ```python
-from pymodules.health import create_http_check, create_tcp_check, create_callable_check
+from pymodules.contrib.health import (
+    create_http_check,
+    create_tcp_check,
+    create_callable_check,
+)
 
 # HTTP health check
 health.add_check("api", create_http_check("api", "https://api.example.com/health"))
@@ -363,23 +374,24 @@ health.add_check("disk", create_callable_check(
 
 ## Async Handlers
 
-Native async support without thread pool overhead:
+Native async support without thread pool overhead. Decorate the handler
+method with `@handles(...)` and declare it `async def`; the host awaits it
+directly on the dispatch loop.
 
 ```python
+from pymodules import Module, handles, module
+
 @module(name="AsyncGreeter")
 class AsyncGreeterModule(Module):
-    def can_handle(self, event: Event) -> bool:
-        return isinstance(event, GreetEvent)
+    @handles(GreetCommand)
+    async def greet(self, command: GreetCommand) -> GreetResponse:
+        # Async operations work natively
+        user = await fetch_user(command.request.name)
+        return GreetResponse(message=f"Hello, {user.display_name}!")
 
-    async def handle(self, event: Event) -> None:
-        if isinstance(event, GreetEvent):
-            # Async operations work natively
-            user = await fetch_user(event.input.name)
-            event.output = GreetOutput(message=f"Hello, {user.display_name}!")
-            event.handled = True
-
-# Use handle_async for best performance
-await host.handle_async(event)
+# Async handlers must be invoked via dispatch_async — sync dispatch() raises
+# SyncDispatchOnAsyncHandlerError when the resolved handler is a coroutine.
+response = await host.dispatch_async(GreetCommand(request=GreetRequest(name="Alice")))
 ```
 
 ## Database Layer
@@ -390,7 +402,7 @@ The database layer provides async SQLAlchemy support with useful mixins and a ge
 
 ```python
 from sqlalchemy import Column, String
-from pymodules.db import Base, UUIDMixin, TimestampMixin, SoftDeleteMixin
+from pymodules.contrib.db import Base, UUIDMixin, TimestampMixin, SoftDeleteMixin
 
 class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     """User model with UUID, timestamps, and soft delete support."""
@@ -410,7 +422,7 @@ class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
 
 ```python
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from pymodules.db import BaseRepository
+from pymodules.contrib.db import BaseRepository
 
 # Set up async engine
 engine = create_async_engine("sqlite+aiosqlite:///app.db")
@@ -434,7 +446,7 @@ count = await user_repo.count()
 ### Database Settings
 
 ```python
-from pymodules.db import DatabaseSettings
+from pymodules.contrib.db import DatabaseSettings
 
 # Load from environment variables (PYMODULES_DB_* prefix)
 settings = DatabaseSettings()
@@ -546,31 +558,36 @@ app.add_middleware(AuthMiddleware, provider=jwt_provider)
 
 ```python
 from fastapi import FastAPI
-from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
-from pymodules.contrib.api import ModuleRouter, register_error_handlers
+from pymodules import (
+    Command,
+    CommandRequest,
+    CommandResponse,
+    Module,
+    ModuleHost,
+    handles,
+    module,
+)
+from pymodules.contrib.api import ModuleRouter, api_endpoint, register_error_handlers
 
-# Define events
-class CreateProduct(Event[CreateProductInput, CreateProductOutput]):
+# Define commands (request/response dataclasses elided for brevity)
+@api_endpoint(method="POST", path="/products")
+class CreateProduct(Command[CreateProductRequest, CreateProductResponse]):
     pass
 
-class GetProduct(Event[GetProductInput, GetProductOutput]):
+@api_endpoint(method="GET", path="/products/{product_id}")
+class GetProduct(Command[GetProductRequest, GetProductResponse]):
     pass
 
 # Define module
 @module(name="products", description="Product management")
 class ProductModule(Module):
-    def can_handle(self, event):
-        return isinstance(event, (CreateProduct, GetProduct))
+    @handles(CreateProduct)
+    async def create(self, command: CreateProduct) -> CreateProductResponse:
+        return CreateProductResponse(id="123", name=command.request.name)
 
-    async def handle(self, event):
-        if isinstance(event, CreateProduct):
-            # Handle creation
-            event.output = CreateProductOutput(id="123", name=event.input.name)
-            event.handled = True
-        elif isinstance(event, GetProduct):
-            # Handle retrieval
-            event.output = GetProductOutput(id=event.input.product_id, name="Widget")
-            event.handled = True
+    @handles(GetProduct)
+    async def get(self, command: GetProduct) -> GetProductResponse:
+        return GetProductResponse(id=command.request.product_id, name="Widget")
 
 # Set up application
 host = ModuleHost()
@@ -580,47 +597,64 @@ app = FastAPI()
 register_error_handlers(app)
 
 router = ModuleRouter(host)
-router.register_event(CreateProduct)
-router.register_event(GetProduct)
+router.register_command(CreateProduct)
+router.register_command(GetProduct)
 router.mount(app, prefix="/api/v1")
 ```
 
 ## Metrics
 
+`MetricsMiddleware` owns its counters; hold a reference to read them.
+
 ```python
-config = ModuleHostConfig(enable_metrics=True)
+from pymodules import MetricsMiddleware, ModuleHost, ModuleHostConfig
+
+metrics = MetricsMiddleware()
+config = ModuleHostConfig(middleware=[metrics])
 host = ModuleHost(config=config)
 
-# After processing events...
-metrics = host.metrics.to_dict()
-# {
-#     "events_dispatched": 1000,
-#     "events_handled": 950,
-#     "events_unhandled": 30,
-#     "events_failed": 20,
-#     "events_retried": 15,
-#     "events_rate_limited": 5,
-#     "events_circuit_broken": 0,
-#     "events_dead_lettered": 20,
-#     "modules_registered": 3
-# }
+# After dispatching some commands...
+print(metrics.dispatched)  # Total commands seen by the middleware
+print(metrics.succeeded)   # Returned without raising and were handled
+print(metrics.failed)      # Inner chain raised
+print(metrics.unmatched)   # No module claimed the Command class
+
+# Per-concern counters live on their middleware instances:
+#   RateLimitMiddleware.rejected_count
+#   DLQMiddleware.dead_lettered_count
 ```
 
 ## Error Handling
 
+`propagate_exceptions=True` re-raises handler exceptions wrapped in
+`CommandHandlingError`. Lifecycle hooks (`on_start`, `on_end`, `on_error`)
+live on `LifecycleMiddleware`, not on `ModuleHostConfig`.
+
 ```python
-from pymodules import ModuleHostConfig
-from pymodules.exceptions import EventHandlingError, ModuleRegistrationError
+from pymodules import (
+    CommandHandlingError,
+    LifecycleMiddleware,
+    ModuleHost,
+    ModuleHostConfig,
+    ModuleRegistrationError,
+)
 
 config = ModuleHostConfig(
     propagate_exceptions=True,  # Re-raise handler exceptions
-    on_error=lambda e, event: logger.error(f"Failed: {event.name}", exc_info=e)
+    middleware=[
+        LifecycleMiddleware(
+            on_error=lambda e, command: logger.error(
+                f"Failed: {command.name}", exc_info=e
+            ),
+        ),
+    ],
 )
+host = ModuleHost(config=config)
 
 try:
-    host.handle(event)
-except EventHandlingError as e:
-    print(f"Event: {e.event.name}")
+    response = host.dispatch(command)
+except CommandHandlingError as e:
+    print(f"Command: {e.command.name}")
     print(f"Module: {e.module.metadata.name}")
     print(f"Error: {e.original_error}")
 ```
