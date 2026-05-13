@@ -1134,10 +1134,6 @@ dev = [
 discovery = [
     { name = "python-consul" },
 ]
-fastapi = [
-    { name = "fastapi" },
-    { name = "uvicorn", extra = ["standard"] },
-]
 full = [
     { name = "aiosqlite" },
     { name = "fastapi" },
@@ -1193,7 +1189,7 @@ requires-dist = [
     { name = "aiosqlite", marker = "extra == 'dev'", specifier = ">=0.19.0" },
     { name = "aiosqlite", marker = "extra == 'sqlite'", specifier = ">=0.19.0" },
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.28.0" },
-    { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.100.0" },
+    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.100.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
@@ -1202,7 +1198,6 @@ requires-dist = [
     { name = "pymodules", extras = ["api", "sqlalchemy"], marker = "extra == 'api-db'" },
     { name = "pymodules", extras = ["api-db", "jwt"], marker = "extra == 'web'" },
     { name = "pymodules", extras = ["consul"], marker = "extra == 'discovery'" },
-    { name = "pymodules", extras = ["fastapi"], marker = "extra == 'api'" },
     { name = "pymodules", extras = ["full"], marker = "extra == 'all'" },
     { name = "pymodules", extras = ["redis"], marker = "extra == 'messaging'" },
     { name = "pymodules", extras = ["sqlalchemy"], marker = "extra == 'postgres'" },
@@ -1218,7 +1213,7 @@ requires-dist = [
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'sqlalchemy'", specifier = ">=2.0.0" },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'fastapi'", specifier = ">=0.23.0" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.23.0" },
 ]
 
 [[package]]

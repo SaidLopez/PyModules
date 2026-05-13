@@ -23,16 +23,17 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-# Web framework integration (legacy)
-fastapi = ["fastapi>=0.100.0", "uvicorn[standard]>=0.23.0"]
-
 # Database layer
 sqlalchemy = ["sqlalchemy[asyncio]>=2.0.0", "pydantic-settings>=2.0.0"]
 postgres = ["pymodules[sqlalchemy]", "asyncpg>=0.28.0"]
 sqlite = ["pymodules[sqlalchemy]", "aiosqlite>=0.19.0"]
 
-# API layer (new)
-api = ["pymodules[fastapi]", "pydantic-settings>=2.0.0"]
+# API layer (pymodules.contrib.api)
+api = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "pydantic-settings>=2.0.0",
+]
 api-db = ["pymodules[api,sqlalchemy]"]
 
 # Auth providers

@@ -55,9 +55,6 @@ Build scalable, production-ready applications where components communicate throu
 # Basic installation
 pip install pymodules
 
-# With FastAPI integration (legacy)
-pip install pymodules[fastapi]
-
 # Database layer (SQLAlchemy async)
 pip install pymodules[sqlite]      # SQLite with aiosqlite
 pip install pymodules[postgres]    # PostgreSQL with asyncpg
@@ -364,83 +361,6 @@ health.add_check("disk", create_callable_check(
 ))
 ```
 
-## FastAPI Integration
-
-### Basic Setup
-
-```python
-from fastapi import FastAPI
-from pymodules import ModuleHost
-from pymodules.fastapi import PyModulesAPI
-
-host = ModuleHost()
-host.register(GreeterModule())
-
-app = FastAPI()
-api = PyModulesAPI(host)
-
-# Auto-generate endpoint from event
-api.add_event_endpoint(app, "/greet", GreetEvent, GreetInput, GreetOutput)
-```
-
-### With Health & Metrics Endpoints
-
-```python
-from pymodules.fastapi import PyModulesAPI
-
-api = PyModulesAPI(host, version="1.0.0")
-
-# Add all standard endpoints
-api.add_health_endpoints(app)  # /health, /health/live, /health/ready
-api.add_metrics_endpoint(app)  # /metrics
-
-# Or add individually
-api.add_event_endpoint(app, "/greet", GreetEvent, GreetInput, GreetOutput)
-```
-
-### Tracing Middleware
-
-```python
-# Automatically inject correlation IDs into all requests
-api.add_tracing_middleware(app)
-
-# Correlation ID available in response headers
-# X-Correlation-ID: abc123...
-```
-
-### Complete Example
-
-```python
-from fastapi import FastAPI
-from pymodules import ModuleHost, ModuleHostConfig
-from pymodules.fastapi import PyModulesAPI
-from pymodules.resilience import RateLimiter, CircuitBreaker
-
-# Configure for production
-config = ModuleHostConfig(
-    enable_metrics=True,
-    enable_tracing=True,
-    rate_limiter=RateLimiter(rate=100, burst=20),
-    circuit_breaker=CircuitBreaker(failure_threshold=5),
-)
-
-host = ModuleHost(config=config)
-host.register(GreeterModule())
-host.register(CalculatorModule())
-
-app = FastAPI(title="My API", version="1.0.0")
-api = PyModulesAPI(host, version="1.0.0")
-
-# Add standard endpoints
-api.add_health_endpoints(app)
-api.add_metrics_endpoint(app)
-api.add_tracing_middleware(app)
-
-# Add event endpoints
-api.add_event_endpoint(app, "/greet", GreetEvent, GreetInput, GreetOutput)
-api.add_event_endpoint(app, "/calculate", CalculatorEvent, CalculatorInput, CalculatorOutput)
-```
-
 ## Async Handlers
 
 Native async support without thread pool overhead:
@@ -596,7 +516,7 @@ Pluggable authentication with JWT support:
 
 ```python
 from datetime import UTC, datetime, timedelta
-from pymodules.api.auth import AuthMiddleware, AuthProvider, TokenClaims, JWTAuthProvider
+from pymodules.contrib.api.auth import AuthMiddleware, AuthProvider, TokenClaims, JWTAuthProvider
 
 # Use built-in JWT provider
 jwt_provider = JWTAuthProvider()  # Reads from PYMODULES_JWT_* env vars
@@ -627,7 +547,7 @@ app.add_middleware(AuthMiddleware, provider=jwt_provider)
 ```python
 from fastapi import FastAPI
 from pymodules import Event, EventInput, EventOutput, Module, ModuleHost, module
-from pymodules.api import ModuleRouter, register_error_handlers
+from pymodules.contrib.api import ModuleRouter, register_error_handlers
 
 # Define events
 class CreateProduct(Event[CreateProductInput, CreateProductOutput]):
@@ -731,40 +651,10 @@ pip install -e ".[dev]"
 # Basic demo
 python -m examples.demo
 
-# FastAPI app
-uvicorn examples.fastapi_app:app --reload
+# API example (pymodules.contrib.api)
+uvicorn examples.api_example:app --reload
 # Visit http://localhost:8000/docs for Swagger UI
 ```
-
-## Migration Guide
-
-### From `pymodules.fastapi` to `pymodules.api`
-
-The `pymodules.fastapi` module is deprecated. Migrate to `pymodules.api` for improved auto-discovery and convention-based routing.
-
-**Before (deprecated):**
-```python
-from pymodules.fastapi import PyModulesAPI
-
-api = PyModulesAPI(host)
-api.add_event_endpoint(app, "/users", CreateUser, CreateUserInput, CreateUserOutput)
-```
-
-**After (recommended):**
-```python
-from pymodules.api import ModuleRouter, register_error_handlers
-
-register_error_handlers(app)
-router = ModuleRouter(host)
-router.register_event(CreateUser)  # Auto-generates POST /users
-router.mount(app, prefix="/api/v1")
-```
-
-**Key differences:**
-- `ModuleRouter` automatically infers HTTP method and path from event names
-- No need to specify Input/Output types - they're extracted from the Event class
-- Better error handling with `register_error_handlers()`
-- Support for custom routes via `@api_endpoint` decorator
 
 ## License
 

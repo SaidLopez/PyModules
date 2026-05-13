@@ -11,7 +11,6 @@ Subpackages:
     pymodules.contrib.db - Database abstraction layer
     pymodules.contrib.health - Kubernetes-shaped health checks
     pymodules.contrib.tracing - Tracing exporters (e.g. OpenTelemetry)
-    pymodules.fastapi - Legacy FastAPI integration (deprecated; use pymodules.contrib.api)
 """
 
 from .config import ModuleHostConfig
