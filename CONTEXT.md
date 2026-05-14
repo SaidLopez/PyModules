@@ -59,6 +59,22 @@ _Avoid_: Listen-to, observe (when ambiguous).
 **Publish**:
 The act of sending an **Event** to subscribers. In-process: `host.publish(event)` (sync) or `host.publish_async(event)` (async) routes through the **EventBus**. Cross-process: a Module holds its own broker reference and calls the broker directly. Distinct from **dispatch**.
 
+**Agent** (distinct from Module):
+A first-class **active producer** primitive, sibling of **Module**. Defined as a class (the *template*) registered with a **ModuleHost**; at runtime the host may hold zero-to-many running instances of that template (**AgentRun**). Where a **Module** is a passive claimant of **Commands**, an **Agent** initiates work — it can be triggered by an explicit spawn call, by **Event** subscription, or by a schedule (timer/cron). An Agent's dispatches flow through the host's middleware chain exactly once; there is no separate per-Agent chain. Capability and resource constraints, if any, are enforced inside the Agent class itself, not by the framework. See ADR-0008.
+_Avoid_: Module (when meaning an active producer), worker (overloaded), bot.
+
+**AgentRun**:
+A single running instance of an **Agent** template. Holds per-instance state via the configured **AgentStateStore** (in-memory by default; persistent backends live in contrib, mirroring the **IdempotencyStore** pattern from ADR-0005). Lifetime is "alive until `self.stop()` or host shutdown" by default — an AgentRun handles many events / ticks over its life, not one-per-trigger. Optional `run()` method is launched as a task; `@subscribes` and `@scheduled` methods fire independently and share state. Terminates on `run()` returning, `self.stop()`, unhandled error, or host shutdown. On unhandled error: log, terminate, publish `AgentFailed` Event; auto-restart is opt-in via `restart_policy: RetryPolicy` on the template. Concurrency: unlimited by default; per-template `max_concurrent` opt-in; cap-hit raises `AgentSpawnRejected`.
+_Avoid_: AgentInstance, AgentSession (collides with auth session).
+
+**Manifest**:
+The machine-readable description of the backend host's surface, consumed by the JS-side codegen to produce typed dispatch/subscribe stubs. Composed of two existing open standards: **OpenAPI** (for `@api_endpoint`-decorated **Commands**, already emitted by the FastAPI contrib) and **AsyncAPI** (for **Events** declared as published by Modules; new emitter required in the full-stack contrib). The manifest is generated at build time; runtime manifest fetch is not supported.
+_Avoid_: Schema (overloaded), API spec (ambiguous).
+
+**Outbound policy**:
+A per-**Event**-class predicate `(event, client_context) -> bool` registered by a publishing **Module**, deciding whether a given **Event** instance is pushed to a given connected SSE client. Default is deny: a browser subscribing to an Event class with no registered policy receives an HTTP 400 from the SSE subscription endpoint. Lives in the full-stack contrib package, not in the **EventBus** (per ADR-0007, the EventBus carries no middleware or filtering). See ADR-0009.
+_Avoid_: Filter, ACL (when ambiguous).
+
 ## Relationships
 
 - A **ModuleHost** owns zero or more **Modules**, an ordered list of **Middleware**, and one in-process **EventBus**.
@@ -69,12 +85,14 @@ The act of sending an **Event** to subscribers. In-process: `host.publish(event)
 - A **Command** is dispatched to exactly one **Module** and returns a response; an **Event** is published to zero or more subscribers and returns nothing.
 - In-process delivery: **dispatch** runs the **Command** through the middleware chain; **publish** runs the **Event** through the **EventBus** (no middleware chain, errors isolated per subscriber). Cross-process publish remains broker-owned and Module-owned — `ModuleHost` itself never crosses a process boundary.
 - A **Module** holds no back-reference to its **ModuleHost**. Inside a handler, a Module does not re-enter dispatch. Cross-Module fan-out is either (a) caller-orchestrated — the caller dispatches command 1, inspects the response, dispatches command 2 — or (b) broadcast via **Event** publish (in-process via the **EventBus**, or out-of-process via a broker held by the Module). Re-entering the middleware chain from within a handler would double-charge rate-limit tokens, re-arm retries, and hide the call graph from the configured chain; it is intentionally not supported. Publishing an **Event** is permitted because it does not re-enter the middleware chain.
+- An **Agent** template registers with a **ModuleHost** alongside **Modules**. An **Agent** does not *claim* **Commands** — only **Modules** do — but it does *produce* them: an **AgentRun** dispatches **Commands** into the host's middleware chain (no per-Agent chain) and may publish **Events**. An AgentRun runs on its own task/thread/event-loop step, so its dispatch is a fresh top-level entry into the chain, not a re-entry from within a chain frame — which is why ADR-0003's "no in-handler dispatch" rule does not apply to it.
 
 ## Layout
 
 - `pymodules.{host,module,interfaces,middleware,eventbus,config,exceptions,logging}` — **dispatch core + in-process EventBus**, ~1,000 LOC, standard library only.
 - `pymodules.{resilience,tracing}` — **default in-process middlewares**, ~1,200 LOC, standard library only. Re-exported from the top-level `pymodules` namespace for ergonomics.
 - `pymodules.contrib.{api,db,messaging,discovery,health,auth,tracing}` — **contrib**, each gated behind an install extra; pulls third-party deps (FastAPI, SQLAlchemy, Redis, Consul, OpenTelemetry, …). The `messaging` package is the **cross-process** Event transport; the in-process EventBus in core does not depend on it.
+- `pymodules.contrib.fullstack` (working name) — **frontend integration** contrib: AsyncAPI emission for **Events**, `@hx_endpoint` decorator + Jinja2 templating for SEO-sensitive HTMX routes, SSE push endpoint with deny-by-default **outbound policy** registry, HttpOnly-cookie JWT shim feeding the existing `AuthMiddleware`. Paired JS ecosystem (npm scope TBD, e.g. `@pymodules/*`) distributes typed codegen stubs + vanilla Web Components (Lit ~5 KB). See ADR-0009.
 
 ## Example dialogue
 
@@ -92,4 +110,5 @@ The act of sending an **Event** to subscribers. In-process: `host.publish(event)
 - **Auto-generated REST routing from class names.** Class names are an internal concern; URLs are an external contract. REST endpoints are declared explicitly via `@api_endpoint(method=..., path=...)` on each **Command**. The contrib API layer does no convention magic.
 - **Implicit sync↔async bridging.** Sync `dispatch()` will not silently run an async handler under `asyncio.run()`; it raises.
 - **Broker-aware host.** A **ModuleHost** never publishes to an external **broker**. Modules that need cross-process publish hold their own broker reference. The host does own an in-process **EventBus** (no transport, no serialisation, no persistence) — that is a fan-out registry, not a broker.
-- **In-handler dispatch back to the host.** A **Module** has no `host` back-pointer. Handlers do not call `self.host.dispatch(OtherCommand)` — re-entering the middleware chain from within a handler would double-charge rate-limit tokens, re-arm retries, and hide the call graph. Fan-out is caller-orchestrated or broker-mediated.
+- **In-handler dispatch back to the host.** A **Module** has no `host` back-pointer. Handlers do not call `self.host.dispatch(OtherCommand)` — re-entering the middleware chain from within a handler would double-charge rate-limit tokens, re-arm retries, and hide the call graph. Fan-out is caller-orchestrated or broker-mediated. **An Agent is the deliberate exception**: it runs outside the chain frame and re-entry concerns do not apply (see ADR-0008).
+- **Server-side rendering of the SPA component layer.** The Web Components + Lit SPA path runs client-side only — no Lit SSR / Declarative Shadow DOM render tier is shipped, because it would require a Node runtime alongside Python and double the deploy story. Routes that need SEO go through the HTMX path (server-rendered HTML via Jinja2 + `@hx_endpoint`); the SPA layer is for authenticated app interiors (see ADR-0009).

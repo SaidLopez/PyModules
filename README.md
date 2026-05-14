@@ -688,7 +688,34 @@ python -m examples.demo
 # API example (pymodules.contrib.api)
 uvicorn examples.api_example:app --reload
 # Visit http://localhost:8000/docs for Swagger UI
+
+# Agent primitive demo (one template, three trigger modes)
+python -m examples.agent.app
+
+# Full-stack tracer-bullet demo (pymodules.contrib.fullstack)
+pip install -e ".[fullstack]"
+uvicorn examples.fullstack.app:app --reload --port 8000
+# Open http://localhost:8000/ in two tabs to see cross-tenant SSE isolation.
 ```
+
+### `examples/agent/`
+
+`examples/agent/` is the runnable counterpart to the integration tests
+for the **Agent** primitive (ADR-0008): one `OrderProcessor` template
+demonstrates explicit spawn, `@subscribes(OrderPlaced, route_by=...)`
+per-customer routing, and a `@scheduled` reconciliation tick — all on
+the same `self` — driven from a tiny terminal REPL. See
+`examples/agent/README.md` for the walkthrough.
+
+### `examples/fullstack/`
+
+`examples/fullstack/` is the runnable tracer-bullet demo for
+**`pymodules.contrib.fullstack`** (ADR-0009): one `MessageModule` posts a
+Command, publishes a `MessagePosted` Event with a tenant-scoped
+`@outbound_policy`, and a vanilla-JS page opens an `EventSource` against
+`/__pymodules__/events?subscribe=MessagePosted`. Two browser tabs on
+different tenants prove cross-tenant SSE isolation. See
+`examples/fullstack/README.md` for the walkthrough.
 
 ## License
 

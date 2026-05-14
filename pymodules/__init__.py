@@ -13,6 +13,18 @@ Subpackages:
     pymodules.contrib.tracing - Tracing exporters (e.g. OpenTelemetry)
 """
 
+from .agent import (
+    Agent,
+    AgentError,
+    AgentFailed,
+    AgentNotRegistered,
+    AgentRun,
+    AgentRunStuck,
+    AgentSpawner,
+    AgentSpawnRejected,
+    scheduled,
+)
+from .agent_state import AgentStateStore, InMemoryAgentStateStore
 from .config import ModuleHostConfig
 from .eventbus import EventBus, EventHandler
 from .exceptions import (
@@ -84,6 +96,13 @@ __all__ = [
     "ModuleHost",
     "handles",
     "subscribes",
+    # Agent primitive (ADR-0008)
+    "Agent",
+    "AgentRun",
+    "AgentSpawner",
+    "AgentStateStore",
+    "InMemoryAgentStateStore",
+    "scheduled",
     # In-process EventBus
     "EventBus",
     "EventHandler",
@@ -107,6 +126,11 @@ __all__ = [
     "CircuitBreakerOpen",
     "SyncDispatchOnAsyncHandlerError",
     "SyncDispatchInAsyncContextError",
+    "AgentError",
+    "AgentFailed",
+    "AgentNotRegistered",
+    "AgentRunStuck",
+    "AgentSpawnRejected",
     # Logging
     "configure_logging",
     "get_logger",

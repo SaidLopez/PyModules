@@ -38,12 +38,19 @@ class ModuleHostConfig:
         middleware: Ordered list of middleware. The first entry is the
             outermost wrapper; the terminal handler-lookup middleware is
             appended by the host itself and is not part of this list.
+        shutdown_grace: Seconds the host waits during :meth:`ModuleHost.shutdown`
+            for in-flight AgentRuns to honour cooperative ``stop()`` before
+            hard-cancelling their tasks. Default ``5.0``. Per ADR-0008 /
+            ticket #11: a hard-cancel publishes :class:`AgentFailed` with
+            an :class:`AgentRunStuck` error so observability tooling can
+            tell a stuck run apart from a natural exception.
     """
 
     max_workers: int = 4
     propagate_exceptions: bool = True
     log_level: int = logging.INFO
     middleware: list["Middleware"] = field(default_factory=list)
+    shutdown_grace: float = 5.0
 
     @classmethod
     def from_env(cls) -> "ModuleHostConfig":

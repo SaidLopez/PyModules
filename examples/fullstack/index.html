@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>PyModules Full-Stack Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                         Roboto, Helvetica, Arial, sans-serif;
+            max-width: 720px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            color: #1a1a1a;
+            line-height: 1.45;
+        }
+        h1 { margin-bottom: 0.25rem; }
+        .subtitle { color: #666; margin-top: 0; }
+        section {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.25rem;
+            background: #fafafa;
+        }
+        section h2 { margin-top: 0; font-size: 1.05rem; }
+        label { display: block; margin: 0.5rem 0 0.2rem; font-size: 0.9rem; }
+        input, select, button {
+            font: inherit;
+            padding: 0.4rem 0.6rem;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="text"], select { width: 100%; }
+        button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 0.6rem;
+        }
+        button:disabled { background: #888; cursor: not-allowed; }
+        button.secondary {
+            background: #eee;
+            color: #333;
+            border: 1px solid #bbb;
+        }
+        #status {
+            font-size: 0.85rem;
+            color: #555;
+            margin-top: 0.6rem;
+        }
+        #status.ok { color: #1a8a3a; }
+        #status.err { color: #c00; }
+        ul#messages {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 360px;
+            overflow-y: auto;
+        }
+        ul#messages li {
+            padding: 0.4rem 0;
+            border-bottom: 1px solid #eee;
+            font-size: 0.92rem;
+        }
+        ul#messages li:last-child { border-bottom: none; }
+        .ts { color: #888; font-size: 0.8rem; margin-right: 0.4rem; }
+        .who { font-weight: 600; color: #1a73e8; }
+        .tenant-tag { color: #888; margin-left: 0.4rem; font-size: 0.8rem; }
+        code { background: #eef; padding: 0 4px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>PyModules Full-Stack Demo</h1>
+    <p class="subtitle">
+        Commands &rarr; Module &rarr; EventBus &rarr; Outbound policy &rarr;
+        SSE &rarr; this page.
+    </p>
+
+    <section id="login-section">
+        <h2>1. Log in (dev shortcut)</h2>
+        <p style="font-size: 0.85rem; color: #666; margin-top: 0;">
+            Hits <code>POST /__demo__/login</code> which mints an HttpOnly
+            access cookie for the chosen tenant. <strong>NOT for
+            production</strong> &mdash; real apps integrate a proper IdP.
+        </p>
+        <label for="user_id">User</label>
+        <input type="text" id="user_id" value="alice" />
+        <label for="tenant_id">Tenant</label>
+        <select id="tenant_id">
+            <option value="tenant-a">tenant-a</option>
+            <option value="tenant-b">tenant-b</option>
+            <option value="tenant-c">tenant-c</option>
+        </select>
+        <button id="login-btn">Log in</button>
+        <button id="logout-btn" class="secondary">Log out</button>
+        <div id="status">not logged in</div>
+    </section>
+
+    <section id="post-section">
+        <h2>2. Post a message</h2>
+        <p style="font-size: 0.85rem; color: #666; margin-top: 0;">
+            Hits <code>POST /messages</code>. The
+            <code>MessageModule</code> handles the Command and publishes a
+            <code>MessagePosted</code> Event. The Outbound policy gates
+            delivery to the matching tenant only.
+        </p>
+        <label for="msg-tenant">Tenant the message belongs to</label>
+        <select id="msg-tenant">
+            <option value="tenant-a">tenant-a</option>
+            <option value="tenant-b">tenant-b</option>
+            <option value="tenant-c">tenant-c</option>
+        </select>
+        <label for="msg-body">Message</label>
+        <input type="text" id="msg-body" placeholder="Hello, world" />
+        <button id="post-btn">Post</button>
+    </section>
+
+    <section id="stream-section">
+        <h2>3. Live messages (SSE)</h2>
+        <p style="font-size: 0.85rem; color: #666; margin-top: 0;">
+            <code>EventSource("/__pymodules__/events?subscribe=MessagePosted")</code>.
+            Only events for <em>your</em> tenant arrive here &mdash; the
+            <code>@outbound_policy</code> on the server filters per
+            connection.
+        </p>
+        <ul id="messages"></ul>
+    </section>
+
+    <script>
+        // ------------------------------------------------------------------
+        // State + helpers
+        // ------------------------------------------------------------------
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        let evtSource = null;
+        let currentTenant = null;
+
+        function setStatus(text, cls) {
+            statusEl.textContent = text;
+            statusEl.className = cls || '';
+        }
+
+        function appendMessage(payload) {
+            const li = document.createElement('li');
+            const ts = document.createElement('span');
+            ts.className = 'ts';
+            ts.textContent = new Date().toLocaleTimeString();
+            const who = document.createElement('span');
+            who.className = 'who';
+            who.textContent = (payload.posted_by || 'someone') + ': ';
+            const body = document.createElement('span');
+            body.textContent = payload.body || '(empty)';
+            const tenant = document.createElement('span');
+            tenant.className = 'tenant-tag';
+            tenant.textContent = '[' + (payload.tenant_id || '?') + ']';
+            li.appendChild(ts);
+            li.appendChild(who);
+            li.appendChild(body);
+            li.appendChild(tenant);
+            messagesEl.insertBefore(li, messagesEl.firstChild);
+        }
+
+        function closeStream() {
+            if (evtSource) {
+                evtSource.close();
+                evtSource = null;
+            }
+        }
+
+        function openStream() {
+            closeStream();
+            // ?subscribe=<EventClassName> per the SSE PRD. The cookie auth
+            // shim authenticates the connection via the HttpOnly cookie
+            // set by /__demo__/login above — no Authorization header.
+            evtSource = new EventSource('/__pymodules__/events?subscribe=MessagePosted');
+            evtSource.addEventListener('MessagePosted', (ev) => {
+                try {
+                    const payload = JSON.parse(ev.data);
+                    appendMessage(payload);
+                } catch (e) {
+                    console.error('bad SSE payload', e, ev.data);
+                }
+            });
+            evtSource.onerror = (e) => {
+                // The browser auto-reconnects on transient errors; we
+                // only surface the state if the connection stays closed.
+                if (evtSource && evtSource.readyState === EventSource.CLOSED) {
+                    setStatus('SSE disconnected', 'err');
+                }
+            };
+            evtSource.onopen = () => {
+                setStatus('logged in as ' + currentTenant + ' / SSE open', 'ok');
+            };
+        }
+
+        // ------------------------------------------------------------------
+        // Login / logout
+        // ------------------------------------------------------------------
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            const userId = document.getElementById('user_id').value.trim() || 'alice';
+            const tenantId = document.getElementById('tenant_id').value;
+            const url = '/__demo__/login?user_id=' +
+                encodeURIComponent(userId) + '&tenant_id=' +
+                encodeURIComponent(tenantId);
+            const resp = await fetch(url, {
+                method: 'POST',
+                credentials: 'same-origin',
+            });
+            if (!resp.ok) {
+                setStatus('login failed: HTTP ' + resp.status, 'err');
+                return;
+            }
+            const data = await resp.json();
+            currentTenant = data.tenant_id;
+            setStatus('logged in as ' + currentTenant + ' (opening SSE...)', 'ok');
+            // Mirror the message-tenant default to the just-logged-in
+            // tenant so the demo flow is "log in, type, post" without
+            // fiddling a separate dropdown.
+            document.getElementById('msg-tenant').value = currentTenant;
+            openStream();
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            closeStream();
+            await fetch('/__demo__/logout', {
+                method: 'POST',
+                credentials: 'same-origin',
+            });
+            currentTenant = null;
+            setStatus('logged out');
+        });
+
+        // ------------------------------------------------------------------
+        // Post a message
+        // ------------------------------------------------------------------
+        document.getElementById('post-btn').addEventListener('click', async () => {
+            const tenantId = document.getElementById('msg-tenant').value;
+            const body = document.getElementById('msg-body').value.trim();
+            if (!body) {
+                setStatus('type a message first', 'err');
+                return;
+            }
+            const resp = await fetch('/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    tenant_id: tenantId,
+                    body: body,
+                    posted_by: currentTenant
+                        ? document.getElementById('user_id').value || 'anon'
+                        : 'anon',
+                }),
+            });
+            if (!resp.ok) {
+                setStatus('post failed: HTTP ' + resp.status, 'err');
+                return;
+            }
+            document.getElementById('msg-body').value = '';
+        });
+    </script>
+</body>
+</html>

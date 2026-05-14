@@ -48,6 +48,19 @@ consul = ["python-consul>=1.1.0"]
 # DNS resolution (included in stdlib, but explicit for type checking)
 dns = []
 
+# Full-stack contrib (pymodules.contrib.fullstack)
+# AsyncAPI emission, SSE push, manifest endpoint, cookie auth shim, HTMX templating.
+# jsonschema is pulled in for schema validation in tests; the AsyncAPI doc shape
+# is small enough to hand-build as a plain dict. jinja2 + httpx-sse are needed by
+# later slices in this contrib (HTMX templating + SSE TestClient) and harmless
+# until then.
+fullstack = [
+    "pymodules[api]",
+    "jsonschema>=4.0.0",
+    "jinja2>=3.0.0",
+    "httpx-sse>=0.4.0",
+]
+
 # Convenience groups
 messaging = ["pymodules[redis]"]
 discovery = ["pymodules[consul]"]
@@ -70,7 +83,7 @@ dev = [
 ]
 
 # Full installation with all optional features
-full = ["pymodules[web,redis,consul,dev]"]
+full = ["pymodules[web,redis,consul,fullstack,dev]"]
 
 # Backward compatibility
 all = ["pymodules[full]"]

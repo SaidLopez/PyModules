@@ -16,7 +16,7 @@ Handlers **return** their typed CommandResponse. The host's
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, ClassVar, TypeVar
 
 from .interfaces import Command, CommandResponse, Event
 
@@ -34,6 +34,17 @@ HANDLES_ATTR = "__pymodules_handles__"
 # Marker attribute name written onto decorated methods by ``@subscribes``.
 # Read by ``ModuleHost.register`` when wiring the EventBus.
 SUBSCRIBES_ATTR = "__pymodules_subscribes__"
+
+# Marker attribute name written onto ``@subscribes``-decorated methods when
+# the decorator was called with ``route_by=...``. Read by
+# :class:`pymodules.host.ModuleHost` at Agent-template registration time to
+# decide whether each matching Event spawns a fresh AgentRun (no route_by)
+# or routes to an existing AgentRun keyed by ``route_by(event)``
+# (issue #14 / ADR-0008). Stored as a SEPARATE marker (rather than
+# bundled into :data:`SUBSCRIBES_ATTR`) so the Module-side wiring path
+# stays exactly the same shape it always was — the Agent path is the
+# only one that consults the routing callable.
+SUBSCRIBES_ROUTE_BY_ATTR = "__pymodules_subscribes_route_by__"
 
 
 def handles(
@@ -80,9 +91,11 @@ def handles(
 
 def subscribes(
     *events: "type[Event]",
+    route_by: Callable[[Event], Any] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
-    Decorator marking a Module method as a subscriber for one or more Event classes.
+    Decorator marking a Module *or* Agent method as a subscriber for one or
+    more Event classes.
 
     Sibling of ``@handles``. ``@handles`` claims a Command (one-winner,
     returns a response, runs through the middleware chain); ``@subscribes``
@@ -91,8 +104,25 @@ def subscribes(
 
     The decorator stores the claimed Event classes as a tuple on the
     function under ``__pymodules_subscribes__``. ``ModuleHost.register``
-    reads that marker and registers the bound method against the
-    host-owned ``EventBus``.
+    reads that marker and either:
+
+    - For a Module: registers the bound method directly against the
+      host-owned ``EventBus`` (the existing behaviour, unchanged).
+    - For an Agent template (issue #14 / ADR-0008): registers a *wrapper*
+      that spawns an :class:`~pymodules.agent.AgentRun` on each matching
+      Event and invokes the decorated method on that fresh run.
+
+    The optional ``route_by`` kwarg is **Agent-only** semantics. When
+    supplied, it is stored under
+    :data:`SUBSCRIBES_ROUTE_BY_ATTR` and read by the Agent-side wiring
+    path: instead of spawning a fresh AgentRun per Event, the host calls
+    ``route_by(event)`` to compute a routing key and looks for an
+    existing :class:`AgentRun` of this template whose
+    ``routing_key`` matches. If one is found, the decorated method is
+    invoked on the live instance (preserving in-flight state). If none
+    matches, a new AgentRun is spawned and the routing key is recorded
+    on it for future events. ``route_by`` on a Module subscriber has no
+    effect — the existing per-publish fan-out is type-only.
 
     The decorated method takes ``(self, event: EventClass)`` and returns
     nothing (or an awaitable of nothing). Both sync and async subscribers
@@ -102,11 +132,30 @@ def subscribes(
     Unlike ``@handles``, multiple Modules may subscribe to the same Event
     class — that is the whole point of pub/sub fan-out.
 
-    Example:
+    Args:
+        *events: One or more :class:`Event` subclasses this method handles.
+            Routing is exact-type per ADR-0007 — a subscriber to a base
+            Event class does not receive instances of derived classes.
+        route_by: Optional callable, Agent-only. Receives the Event and
+            returns the routing key (any value usable as a dict key /
+            ``==``-comparable). Required ``None`` semantics: spawn a
+            fresh AgentRun per matching Event (the default).
+
+    Example::
+
+        # Module (existing behaviour, no route_by):
         class AuditModule(Module):
             @subscribes(UserCreated)
             def log_user_created(self, event: UserCreated) -> None:
                 self.audit_log.append((event.user_id, event.name))
+
+        # Agent with route_by (new, issue #14):
+        class TenantSaga(Agent):
+            @subscribes(OrderPlaced, route_by=lambda e: e.tenant_id)
+            def on_order(self, event: OrderPlaced) -> None:
+                # All OrderPlaced events with the same tenant_id land on
+                # the same in-flight AgentRun, sharing self state.
+                ...
     """
     if not events:
         raise TypeError("@subscribes requires at least one Event class")
@@ -119,6 +168,13 @@ def subscribes(
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         setattr(func, SUBSCRIBES_ATTR, tuple(events))
+        # ``route_by`` lives in its own marker so the Module-side path
+        # never has to know about it: ``_collect_subscribers`` keeps its
+        # existing ``(EventCls, bound_method)`` shape, and the new
+        # ``_collect_agent_subscribers`` reads both markers to build
+        # ``(EventCls, method_name, route_by)`` triples.
+        if route_by is not None:
+            setattr(func, SUBSCRIBES_ROUTE_BY_ATTR, route_by)
         return func
 
     return decorator
@@ -179,6 +235,14 @@ class Module:
 
     _module_metadata: ModuleMetadata = ModuleMetadata()
 
+    # Events this Module declares as published. Read by the (optional)
+    # ``pymodules.contrib.fullstack`` AsyncAPI emitter and Outbound policy
+    # registry to know which Event classes the Module commits to producing.
+    # Default is the empty tuple, so existing Modules that don't declare
+    # anything continue to work unchanged. Core does not consume this
+    # attribute — it is a contract for the fullstack contrib.
+    published_events: ClassVar[tuple[type[Event], ...]] = ()
+
     def __init__(self) -> None:
         # Initialize metadata from class if not set by decorator
         if not hasattr(self.__class__, "_module_metadata"):
@@ -201,6 +265,7 @@ class Module:
 __all__ = [
     "HANDLES_ATTR",
     "SUBSCRIBES_ATTR",
+    "SUBSCRIBES_ROUTE_BY_ATTR",
     "Module",
     "ModuleMetadata",
     "handles",
