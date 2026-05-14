@@ -58,10 +58,12 @@ import asyncio
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from .logging import get_logger
+
+UTC = timezone.utc
 
 if TYPE_CHECKING:
     pass
@@ -132,9 +134,7 @@ class Schedule:
 
     def __post_init__(self) -> None:
         if (self.interval is None) == (self.cron is None):
-            raise TypeError(
-                "Schedule requires exactly one of interval= or cron="
-            )
+            raise TypeError("Schedule requires exactly one of interval= or cron=")
         if self.interval is not None and self.interval.total_seconds() <= 0:
             raise ValueError("Schedule.interval must be a positive timedelta")
         if self.cron is not None:
@@ -228,9 +228,7 @@ class _CronExpr:
                         f"invalid step value in cron field {field!r}: {step_part!r}"
                     ) from e
                 if step <= 0:
-                    raise ValueError(
-                        f"step must be positive in cron field {field!r}"
-                    )
+                    raise ValueError(f"step must be positive in cron field {field!r}")
             else:
                 rng_part = item
                 step = 1
@@ -242,21 +240,15 @@ class _CronExpr:
                 try:
                     a, b = int(a_str), int(b_str)
                 except ValueError as e:
-                    raise ValueError(
-                        f"invalid range in cron field {field!r}: {rng_part!r}"
-                    ) from e
+                    raise ValueError(f"invalid range in cron field {field!r}: {rng_part!r}") from e
             else:
                 try:
                     a = b = int(rng_part)
                 except ValueError as e:
-                    raise ValueError(
-                        f"invalid value in cron field {field!r}: {rng_part!r}"
-                    ) from e
+                    raise ValueError(f"invalid value in cron field {field!r}: {rng_part!r}") from e
 
             if a < lo or b > hi or a > b:
-                raise ValueError(
-                    f"cron field {field!r} out of range [{lo},{hi}]"
-                )
+                raise ValueError(f"cron field {field!r} out of range [{lo},{hi}]")
 
             values.update(range(a, b + 1, step))
 
@@ -287,9 +279,7 @@ class _CronExpr:
             if self.matches(candidate):
                 return candidate
             candidate += timedelta(minutes=1)
-        raise RuntimeError(
-            f"cron expression has no match within 5 years after {current!r}"
-        )
+        raise RuntimeError(f"cron expression has no match within 5 years after {current!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -374,18 +364,14 @@ class Scheduler:
             existing = self._registrations[key]
             if existing.task is not None and not existing.task.done():
                 existing.task.cancel()
-        reg = _Registration(
-            run_id=agent_run_id, method=method, schedule=schedule
-        )
+        reg = _Registration(run_id=agent_run_id, method=method, schedule=schedule)
         self._registrations[key] = reg
         if self._running:
             reg.task = asyncio.get_event_loop().create_task(self._loop(reg))
 
     def remove(self, agent_run_id: str) -> None:
         """Drop every registration for ``agent_run_id`` and cancel its loops."""
-        for key in [
-            k for k in self._registrations if k[0] == agent_run_id
-        ]:
+        for key in [k for k in self._registrations if k[0] == agent_run_id]:
             reg = self._registrations.pop(key)
             if reg.task is not None and not reg.task.done():
                 reg.task.cancel()
@@ -420,9 +406,7 @@ class Scheduler:
             if reg.task is not None and not reg.task.done():
                 reg.task.cancel()
 
-    def set_run_alive_predicate(
-        self, predicate: Callable[[str], bool] | None
-    ) -> None:
+    def set_run_alive_predicate(self, predicate: Callable[[str], bool] | None) -> None:
         """Install a predicate the scheduler consults to decide if a run is alive.
 
         Called by :class:`ModuleHost` so each scheduled-method loop
@@ -500,9 +484,7 @@ class Scheduler:
                     # wrapper's finally — that's what the next tick's
                     # re-entry guard observes.
                     reg.in_flight = True
-                    asyncio.get_event_loop().create_task(
-                        self._invoke(reg)
-                    )
+                    asyncio.get_event_loop().create_task(self._invoke(reg))
                     # Yield to the loop so the just-launched task gets
                     # a chance to *start*. For a method body that
                     # completes synchronously (or near-synchronously),

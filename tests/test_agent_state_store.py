@@ -26,7 +26,6 @@ from pymodules import (
     ModuleHost,
 )
 
-
 # ---------------------------------------------------------------------------
 # Conformance suite — subclass with one line per backend
 # ---------------------------------------------------------------------------
@@ -47,9 +46,7 @@ class StoreConformance:
     """
 
     def make_store(self) -> AgentStateStore:
-        raise NotImplementedError(
-            "Subclasses of StoreConformance must override make_store()."
-        )
+        raise NotImplementedError("Subclasses of StoreConformance must override make_store().")
 
     def test_protocol_compliance(self) -> None:
         """``isinstance(store, AgentStateStore)`` is True (runtime_checkable)."""

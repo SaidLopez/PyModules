@@ -42,14 +42,14 @@ job of contrib brokers (Redis/Kafka) that Modules talk to directly.
 import asyncio
 import inspect
 from collections.abc import Awaitable, Callable
-from typing import Any, Union
+from typing import Any
 
 from .interfaces import Event
 from .logging import eventbus_logger
 
 # A subscriber callable receives an Event instance and returns either
 # nothing (sync) or an awaitable that resolves to nothing (async).
-EventHandler = Callable[[Event], Union[None, Awaitable[None]]]
+EventHandler = Callable[[Event], None | Awaitable[None]]
 
 
 class EventBus:
@@ -104,9 +104,7 @@ class EventBus:
         removes one registration at a time (first-match).
         """
         if not isinstance(event_type, type) or not issubclass(event_type, Event):
-            raise TypeError(
-                f"event_type must be a subclass of Event; got {event_type!r}"
-            )
+            raise TypeError(f"event_type must be a subclass of Event; got {event_type!r}")
         self._subscribers.setdefault(event_type, []).append(handler)
         eventbus_logger.debug(
             "Subscribed %s to %s (now %d subscriber(s))",

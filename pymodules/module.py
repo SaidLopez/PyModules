@@ -162,9 +162,7 @@ def subscribes(
 
     for event_cls in events:
         if not isinstance(event_cls, type) or not issubclass(event_cls, Event):
-            raise TypeError(
-                f"@subscribes arguments must be Event subclasses; got {event_cls!r}"
-            )
+            raise TypeError(f"@subscribes arguments must be Event subclasses; got {event_cls!r}")
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         setattr(func, SUBSCRIBES_ATTR, tuple(events))

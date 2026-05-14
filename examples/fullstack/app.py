@@ -66,9 +66,9 @@ from pymodules.contrib.api import (
 )
 from pymodules.contrib.api.auth import JWTAuthProvider, JWTSettings
 from pymodules.contrib.fullstack import (
-    ClientContext,
     DEFAULT_ACCESS_COOKIE,
     DEFAULT_REFRESH_COOKIE,
+    ClientContext,
     attach_manifest_cache_invalidator,
     build_manifest_router,
     build_refresh_router,

@@ -34,7 +34,6 @@ from pymodules.contrib.fullstack import (
     make_cookie_auth_dependency,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic Events / Modules
 # ---------------------------------------------------------------------------
@@ -86,9 +85,7 @@ def issue_token(jwt_provider):
     """Sync helper that issues a JWT with the given claims for TestClient."""
 
     def _issue(claims: dict[str, Any]) -> str:
-        return asyncio.get_event_loop().run_until_complete(
-            jwt_provider.create_token(claims)
-        )
+        return asyncio.get_event_loop().run_until_complete(jwt_provider.create_token(claims))
 
     return _issue
 
@@ -107,13 +104,9 @@ def _build_app(
     app = FastAPI()
     cookie_auth = make_cookie_auth_dependency(jwt_provider)
     if path is None:
-        router = build_manifest_router(
-            host, app, cookie_auth_dependency=cookie_auth
-        )
+        router = build_manifest_router(host, app, cookie_auth_dependency=cookie_auth)
     else:
-        router = build_manifest_router(
-            host, app, cookie_auth_dependency=cookie_auth, path=path
-        )
+        router = build_manifest_router(host, app, cookie_auth_dependency=cookie_auth, path=path)
     app.include_router(router)
     return app, router.invalidate  # type: ignore[attr-defined]
 
@@ -126,9 +119,7 @@ def _build_app(
 class TestManifestHappyPath:
     """Authenticated GET returns both subdocuments populated."""
 
-    def test_returns_openapi_and_asyncapi_subdocs(
-        self, jwt_provider, issue_token
-    ) -> None:
+    def test_returns_openapi_and_asyncapi_subdocs(self, jwt_provider, issue_token) -> None:
         host = ModuleHost()
         host.register(WidgetModule())
 
@@ -202,9 +193,7 @@ class TestManifestCacheInvalidation:
         second_channels = set(second.json()["asyncapi"]["channels"].keys())
         assert second_channels == {"WidgetCreated", "GadgetCreated"}
 
-    def test_invalidate_attribute_clears_cache_directly(
-        self, jwt_provider, issue_token
-    ) -> None:
+    def test_invalidate_attribute_clears_cache_directly(self, jwt_provider, issue_token) -> None:
         """The ``router.invalidate`` callable also clears the cache on its own.
 
         This exercises the manual-invalidation surface for callers that
@@ -222,9 +211,7 @@ class TestManifestCacheInvalidation:
             cookies={"pymodules_access": token},
         )
         assert first.status_code == 200
-        assert set(first.json()["asyncapi"]["channels"].keys()) == {
-            "WidgetCreated"
-        }
+        assert set(first.json()["asyncapi"]["channels"].keys()) == {"WidgetCreated"}
 
         # Register without the host hook → cache would still serve the
         # stale doc on its own.
@@ -276,9 +263,7 @@ class TestManifestPath:
         host = ModuleHost()
         host.register(WidgetModule())
 
-        app, _invalidate = _build_app(
-            host, jwt_provider, path="/custom/manifest"
-        )
+        app, _invalidate = _build_app(host, jwt_provider, path="/custom/manifest")
         token = issue_token({"sub": "dev-1"})
         client = TestClient(app)
 

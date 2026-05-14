@@ -151,10 +151,7 @@ def _schema_for_dataclass(cls: type) -> dict[str, Any]:
         properties[field.name] = _schema_for_type(annotated)
         # A field is "required" in the AsyncAPI sense if it has no default
         # — i.e. constructing the dataclass without supplying it would raise.
-        if (
-            field.default is dataclasses.MISSING
-            and field.default_factory is dataclasses.MISSING  # type: ignore[misc]
-        ):
+        if field.default is dataclasses.MISSING and field.default_factory is dataclasses.MISSING:
             required.append(field.name)
 
     schema: dict[str, Any] = {

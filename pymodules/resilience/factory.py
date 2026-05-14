@@ -49,9 +49,7 @@ def default_middleware(
     chain: list[Middleware] = []
 
     if idempotency_ttl is not None and idempotency_ttl > 0:
-        chain.append(
-            IdempotencyMiddleware(InMemoryIdempotencyStore(ttl_seconds=idempotency_ttl))
-        )
+        chain.append(IdempotencyMiddleware(InMemoryIdempotencyStore(ttl_seconds=idempotency_ttl)))
 
     if rate_limit is not None and rate_limit > 0:
         chain.append(

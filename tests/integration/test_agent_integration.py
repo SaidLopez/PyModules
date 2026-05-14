@@ -410,8 +410,7 @@ class TestAgentRestartPolicy:
 
         # 1 original + 2 restart-attempt crashes.
         assert len(failures) == 3, (
-            f"Expected 3 AgentFailed events (initial crash + 2 restarts), "
-            f"got {len(failures)}"
+            f"Expected 3 AgentFailed events (initial crash + 2 restarts), got {len(failures)}"
         )
         # Every event carries the original exception type.
         for event in failures:
@@ -643,9 +642,7 @@ class TestShutdownGrace:
         await loop.run_in_executor(None, host.shutdown)
 
         # Exactly one AgentFailed carrying AgentRunStuck.
-        stuck_events = [
-            f for f in failures if isinstance(f.error, AgentRunStuck)
-        ]
+        stuck_events = [f for f in failures if isinstance(f.error, AgentRunStuck)]
         assert len(stuck_events) == 1
         stuck = stuck_events[0]
         assert stuck.agent_template_name == "StubbornAgent"

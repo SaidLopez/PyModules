@@ -228,9 +228,7 @@ class TestSchedulerIntervalFiring:
             nonlocal call_count
             call_count += 1
 
-        sched.add(
-            "run-1", method, Schedule(interval=timedelta(seconds=5))
-        )
+        sched.add("run-1", method, Schedule(interval=timedelta(seconds=5)))
         sched.start()
         # Loop registers its first sleeper after a yield.
         await asyncio.sleep(0)
@@ -259,9 +257,7 @@ class TestSchedulerIntervalFiring:
             nonlocal call_count
             call_count += 1
 
-        sched.add(
-            "run-1", method, Schedule(interval=timedelta(seconds=1))
-        )
+        sched.add("run-1", method, Schedule(interval=timedelta(seconds=1)))
         sched.start()
         await asyncio.sleep(0)
         await clock.advance(1.0)
@@ -288,9 +284,7 @@ class TestSchedulerCronFiring:
             nonlocal call_count
             call_count += 1
 
-        sched.add(
-            "run-1", method, Schedule(cron="0 * * * *")
-        )
+        sched.add("run-1", method, Schedule(cron="0 * * * *"))
         sched.start()
         await asyncio.sleep(0)
 
@@ -327,12 +321,8 @@ class TestSchedulerMultipleMethods:
             nonlocal slow_count
             slow_count += 1
 
-        sched.add(
-            "run-1", fast, Schedule(interval=timedelta(seconds=1))
-        )
-        sched.add(
-            "run-1", slow, Schedule(interval=timedelta(seconds=5))
-        )
+        sched.add("run-1", fast, Schedule(interval=timedelta(seconds=1)))
+        sched.add("run-1", slow, Schedule(interval=timedelta(seconds=5)))
         sched.start()
         await asyncio.sleep(0)
 
@@ -372,9 +362,7 @@ class TestSchedulerReentrySkip:
             invocations += 1
             await release.wait()
 
-        sched.add(
-            "run-1", slow_method, Schedule(interval=timedelta(seconds=5))
-        )
+        sched.add("run-1", slow_method, Schedule(interval=timedelta(seconds=5)))
         sched.start()
         await asyncio.sleep(0)
 

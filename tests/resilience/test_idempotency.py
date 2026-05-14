@@ -10,6 +10,7 @@ import pytest
 
 from pymodules import (
     Command,
+    CommandHandlingError,
     CommandRequest,
     CommandResponse,
     IdempotencyMiddleware,
@@ -167,9 +168,9 @@ class TestIdempotencyMiddleware:
         host = ModuleHost(config=ModuleHostConfig(middleware=[mw]))
         host.register(mod)
 
-        with pytest.raises(Exception):
+        with pytest.raises(CommandHandlingError):
             host.dispatch(IdemCommand(request=IdemInput(), command_id="id-1"))
-        with pytest.raises(Exception):
+        with pytest.raises(CommandHandlingError):
             host.dispatch(IdemCommand(request=IdemInput(), command_id="id-1"))
 
         # Handler ran both times — failures are not cached.

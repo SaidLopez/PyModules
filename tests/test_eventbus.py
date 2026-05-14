@@ -8,6 +8,9 @@ from dataclasses import dataclass
 import pytest
 
 from pymodules import (
+    Command,
+    CommandRequest,
+    CommandResponse,
     Event,
     EventBus,
     Module,
@@ -15,13 +18,7 @@ from pymodules import (
     handles,
     subscribes,
 )
-from pymodules import (
-    Command,
-    CommandRequest,
-    CommandResponse,
-)
 from pymodules.module import SUBSCRIBES_ATTR
-
 
 # ---------------------------------------------------------------------------
 # Event fixtures

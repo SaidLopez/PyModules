@@ -24,7 +24,6 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -87,10 +86,12 @@ class TestClientContext:
     """``ClientContext`` is a frozen identity dataclass — not CommandContext."""
 
     def test_is_frozen(self) -> None:
+        from dataclasses import FrozenInstanceError
+
         from pymodules.contrib.fullstack import ClientContext
 
         ctx = ClientContext(user_id="u", tenant_id="t", claims={})
-        with pytest.raises(Exception):  # FrozenInstanceError subclass
+        with pytest.raises(FrozenInstanceError):
             ctx.user_id = "other"  # type: ignore[misc]
 
     def test_distinct_from_command_context(self) -> None:
@@ -116,9 +117,7 @@ class TestClientContext:
 class TestCookieAuthDependency:
     """The ``cookie_auth_required`` FastAPI dependency."""
 
-    def test_valid_access_cookie_returns_client_context(
-        self, jwt_provider, issue_token
-    ) -> None:
+    def test_valid_access_cookie_returns_client_context(self, jwt_provider, issue_token) -> None:
         """Valid access cookie -> ClientContext threaded into the handler."""
         from pymodules.contrib.fullstack import (
             ClientContext,
@@ -148,9 +147,7 @@ class TestCookieAuthDependency:
             "claims_has_sub": True,
         }
 
-    def test_missing_access_cookie_returns_401_with_challenge(
-        self, jwt_provider
-    ) -> None:
+    def test_missing_access_cookie_returns_401_with_challenge(self, jwt_provider) -> None:
         from pymodules.contrib.fullstack import (
             ClientContext,
             make_cookie_auth_dependency,
@@ -169,9 +166,7 @@ class TestCookieAuthDependency:
         assert response.status_code == 401
         assert response.headers["www-authenticate"] == 'Cookie realm="pymodules"'
 
-    def test_expired_access_cookie_returns_401_with_challenge(
-        self, jwt_provider
-    ) -> None:
+    def test_expired_access_cookie_returns_401_with_challenge(self, jwt_provider) -> None:
         from pymodules.contrib.fullstack import (
             ClientContext,
             make_cookie_auth_dependency,
@@ -205,9 +200,7 @@ class TestCookieAuthDependency:
             return {"user_id": client.user_id}
 
         client = TestClient(app)
-        response = client.get(
-            "/me", cookies={"pymodules_access": "not-a-real-jwt"}
-        )
+        response = client.get("/me", cookies={"pymodules_access": "not-a-real-jwt"})
 
         assert response.status_code == 401
         assert response.headers["www-authenticate"] == 'Cookie realm="pymodules"'
@@ -219,9 +212,7 @@ class TestCookieAuthDependency:
             make_cookie_auth_dependency,
         )
 
-        cookie_auth = make_cookie_auth_dependency(
-            jwt_provider, access_cookie_name="my_app_access"
-        )
+        cookie_auth = make_cookie_auth_dependency(jwt_provider, access_cookie_name="my_app_access")
         app = FastAPI()
 
         @app.get("/me")
@@ -248,9 +239,7 @@ class TestCookieAuthDependency:
 class TestRefreshEndpoint:
     """The ``/__pymodules__/auth/refresh`` endpoint."""
 
-    def test_valid_refresh_rotates_both_cookies(
-        self, jwt_provider, issue_token
-    ) -> None:
+    def test_valid_refresh_rotates_both_cookies(self, jwt_provider, issue_token) -> None:
         from pymodules.contrib.fullstack import build_refresh_router
 
         # ``secure=False`` because TestClient is plain HTTP; the
@@ -332,9 +321,7 @@ class TestRefreshEndpoint:
         assert response.status_code == 401
         assert response.headers["www-authenticate"] == 'Cookie realm="pymodules"'
 
-    def test_production_config_cookie_attributes(
-        self, jwt_provider, issue_token
-    ) -> None:
+    def test_production_config_cookie_attributes(self, jwt_provider, issue_token) -> None:
         """HttpOnly + SameSite=Strict + Secure all set when ``secure=True``."""
         from pymodules.contrib.fullstack import build_refresh_router
 
@@ -352,12 +339,8 @@ class TestRefreshEndpoint:
         assert response.status_code == 200
 
         set_cookie_headers = response.headers.get_list("set-cookie")
-        access_headers = [
-            h for h in set_cookie_headers if h.startswith("pymodules_access=")
-        ]
-        refresh_headers = [
-            h for h in set_cookie_headers if h.startswith("pymodules_refresh=")
-        ]
+        access_headers = [h for h in set_cookie_headers if h.startswith("pymodules_access=")]
+        refresh_headers = [h for h in set_cookie_headers if h.startswith("pymodules_refresh=")]
         assert access_headers
         assert refresh_headers
 
@@ -404,9 +387,7 @@ class TestRefreshEndpoint:
 class TestBearerTokenRegression:
     """ADR-0002: existing ``AuthMiddleware`` path is untouched by the shim."""
 
-    def test_bearer_route_still_works_without_cookie(
-        self, jwt_provider, issue_token
-    ) -> None:
+    def test_bearer_route_still_works_without_cookie(self, jwt_provider, issue_token) -> None:
         """A route guarded only by ``AuthMiddleware`` authenticates via the
         ``Authorization: Bearer`` header — no cookie involved, no cookie shim
         imported on the request path."""
@@ -423,9 +404,7 @@ class TestBearerTokenRegression:
         client = TestClient(app)
 
         # With bearer header -> 200.
-        ok = client.get(
-            "/bearer-only", headers={"Authorization": f"Bearer {token}"}
-        )
+        ok = client.get("/bearer-only", headers={"Authorization": f"Bearer {token}"})
         assert ok.status_code == 200
         assert ok.json() == {"status": "ok"}
 
@@ -436,7 +415,5 @@ class TestBearerTokenRegression:
         # And critically: passing only a cookie (no Authorization header) is
         # still rejected — the bearer path doesn't accidentally inherit the
         # cookie shim's read behaviour.
-        cookie_only = client.get(
-            "/bearer-only", cookies={"pymodules_access": token}
-        )
+        cookie_only = client.get("/bearer-only", cookies={"pymodules_access": token})
         assert cookie_only.status_code == 401

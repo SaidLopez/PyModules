@@ -23,8 +23,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .asyncapi import emit_asyncapi
-    from .exceptions import FullstackError, OutboundPolicyConflict
-    from .outbound_policy import OutboundPolicyRegistry, outbound_policy
 
     # --- Cookie auth shim (issue #5) --------------------------------------
     from .client_context import ClientContext
@@ -35,19 +33,24 @@ if TYPE_CHECKING:
         make_cookie_auth_dependency,
     )
 
+    # --- SSE push endpoint (issue #7) -------------------------------------
+    from .exceptions import (
+        FullstackError,
+        MissingOutboundPolicy,
+        OutboundPolicyConflict,
+        UnknownEventSubscription,
+    )
+
     # --- Manifest endpoint (issue #6) -------------------------------------
     from .manifest import (
         DEFAULT_MANIFEST_PATH,
         attach_manifest_cache_invalidator,
         build_manifest_router,
     )
-
-    # --- SSE push endpoint (issue #7) -------------------------------------
-    from .exceptions import MissingOutboundPolicy, UnknownEventSubscription
-    from .sse import build_sse_router
+    from .outbound_policy import OutboundPolicyRegistry, outbound_policy
 
     # --- SSE observability + graceful shutdown drain (issue #8) -----------
-    from .sse import SSEMetrics, register_with_host
+    from .sse import SSEMetrics, build_sse_router, register_with_host
 
 __all__ = [
     "emit_asyncapi",

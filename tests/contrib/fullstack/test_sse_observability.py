@@ -59,7 +59,6 @@ from tests.contrib.fullstack.test_sse import (
     _running_server,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic Events + Modules
 # ---------------------------------------------------------------------------
@@ -127,9 +126,7 @@ def issue_token_async(jwt_provider):
 @pytest.fixture
 def issue_token_sync(jwt_provider):
     def _issue(claims: dict[str, Any]) -> str:
-        return asyncio.get_event_loop().run_until_complete(
-            jwt_provider.create_token(claims)
-        )
+        return asyncio.get_event_loop().run_until_complete(jwt_provider.create_token(claims))
 
     return _issue
 
@@ -148,9 +145,7 @@ def _build_app(host: ModuleHost, jwt_provider):
 
 
 class TestMetricsSurface:
-    def test_router_exposes_metrics_dataclass_with_all_counters_at_zero(
-        self, jwt_provider
-    ) -> None:
+    def test_router_exposes_metrics_dataclass_with_all_counters_at_zero(self, jwt_provider) -> None:
         from pymodules.contrib.fullstack import SSEMetrics
 
         host = ModuleHost()
@@ -173,17 +168,13 @@ class TestMetricsSurface:
 
 
 class TestDenialCounters:
-    def test_unauthenticated_denial_increments_counter(
-        self, jwt_provider
-    ) -> None:
+    def test_unauthenticated_denial_increments_counter(self, jwt_provider) -> None:
         host = ModuleHost()
         host.register(AlwaysTrueModule())
         try:
             app, router = _build_app(host, jwt_provider)
             client = TestClient(app)
-            response = client.get(
-                "/__pymodules__/events", params={"subscribe": "Pinged"}
-            )
+            response = client.get("/__pymodules__/events", params={"subscribe": "Pinged"})
             assert response.status_code == 401
             assert router.metrics.denials_unauthenticated == 1
             # And we did NOT count this as an opened connection.
@@ -191,9 +182,7 @@ class TestDenialCounters:
         finally:
             host.shutdown()
 
-    def test_unknown_event_denial_increments_counter(
-        self, jwt_provider, issue_token_sync
-    ) -> None:
+    def test_unknown_event_denial_increments_counter(self, jwt_provider, issue_token_sync) -> None:
         host = ModuleHost()
         host.register(AlwaysTrueModule())
         try:
@@ -245,9 +234,7 @@ class TestStreamingCounters:
         host.register(AlwaysTrueModule())
         try:
             app, router = _build_app(host, jwt_provider)
-            token = await issue_token_async(
-                {"sub": "u-1", "tenant_id": "acme"}
-            )
+            token = await issue_token_async({"sub": "u-1", "tenant_id": "acme"})
 
             with _running_server(app) as server:
                 async with httpx.AsyncClient(base_url=server.base_url) as client:
@@ -274,9 +261,7 @@ class TestStreamingCounters:
         host.register(AlwaysTrueModule())
         try:
             app, router = _build_app(host, jwt_provider)
-            token = await issue_token_async(
-                {"sub": "u-1", "tenant_id": "acme"}
-            )
+            token = await issue_token_async({"sub": "u-1", "tenant_id": "acme"})
 
             with _running_server(app) as server:
                 async with httpx.AsyncClient(base_url=server.base_url) as client:
@@ -309,9 +294,7 @@ class TestStreamingCounters:
         host.register(DenyAllModule())
         try:
             app, router = _build_app(host, jwt_provider)
-            token = await issue_token_async(
-                {"sub": "u-1", "tenant_id": "acme"}
-            )
+            token = await issue_token_async({"sub": "u-1", "tenant_id": "acme"})
 
             with _running_server(app) as server:
                 async with httpx.AsyncClient(base_url=server.base_url) as client:
@@ -327,9 +310,7 @@ class TestStreamingCounters:
                                 break
                             await asyncio.sleep(0.02)
 
-                        _publish_after(
-                            host, Pinged(tenant_id="acme", payload="dropped")
-                        )
+                        _publish_after(host, Pinged(tenant_id="acme", payload="dropped"))
 
                         # Read attempt times out — policy dropped the event.
                         with pytest.raises(asyncio.TimeoutError):
@@ -360,9 +341,7 @@ class TestShutdownDrain:
         try:
             app, router = _build_app(host, jwt_provider)
             register_with_host(host, router, shutdown_grace=2.0)
-            token = await issue_token_async(
-                {"sub": "u-1", "tenant_id": "acme"}
-            )
+            token = await issue_token_async({"sub": "u-1", "tenant_id": "acme"})
 
             with _running_server(app) as server:
                 async with (
@@ -420,9 +399,7 @@ class TestShutdownDrain:
                                 pass
 
                         await asyncio.wait_for(
-                            asyncio.gather(
-                                _drain_to_end(r1), _drain_to_end(r2)
-                            ),
+                            asyncio.gather(_drain_to_end(r1), _drain_to_end(r2)),
                             timeout=3.0,
                         )
 
@@ -442,9 +419,7 @@ class TestShutdownDrain:
             # against an empty Module list is a no-op).
             host.shutdown()
 
-    def test_new_connection_during_shutdown_gets_503(
-        self, jwt_provider, issue_token_sync
-    ) -> None:
+    def test_new_connection_during_shutdown_gets_503(self, jwt_provider, issue_token_sync) -> None:
         """Once shutdown has flipped the coordinator, a fresh GET must
         be rejected with 503 — the router stops accepting new streams.
 

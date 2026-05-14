@@ -114,9 +114,7 @@ def outbound_policy(
                 return event.tenant_id == client.tenant_id
     """
     if not (isinstance(event_cls, type) and issubclass(event_cls, Event)):
-        raise TypeError(
-            f"@outbound_policy argument must be an Event subclass; got {event_cls!r}"
-        )
+        raise TypeError(f"@outbound_policy argument must be an Event subclass; got {event_cls!r}")
 
     def decorator(func: F) -> F:
         setattr(func, OUTBOUND_POLICY_ATTR, event_cls)
@@ -163,9 +161,7 @@ class OutboundPolicyRegistry:
         policy (e.g. for test doubles or hot-reloads).
         """
         if not (isinstance(event_cls, type) and issubclass(event_cls, Event)):
-            raise TypeError(
-                f"event_cls must be an Event subclass; got {event_cls!r}"
-            )
+            raise TypeError(f"event_cls must be an Event subclass; got {event_cls!r}")
         if not override and event_cls in self._policies:
             raise OutboundPolicyConflict(
                 f"Outbound policy for {event_cls.__name__} is already "

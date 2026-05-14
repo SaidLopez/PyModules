@@ -28,7 +28,6 @@ from pymodules.contrib.fullstack import (
     outbound_policy,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic Events + minimal ClientContext stand-in
 # ---------------------------------------------------------------------------
@@ -108,9 +107,7 @@ class TestDoubleRegistration:
     def test_override_true_replaces_existing_policy(self):
         registry = OutboundPolicyRegistry()
         registry.register(MessagePosted, lambda event, client: True)
-        registry.register(
-            MessagePosted, lambda event, client: False, override=True
-        )
+        registry.register(MessagePosted, lambda event, client: False, override=True)
         # Confirm the *new* callable is the live one.
         event = MessagePosted(tenant_id="t-1", body="hi")
         assert registry.apply(event, FakeClientContext()) is False
@@ -179,9 +176,7 @@ class TestDecoratorWiring:
             published_events = (MessagePosted,)
 
             @outbound_policy(MessagePosted)
-            def gate_message_posted(
-                self, event: MessagePosted, client: FakeClientContext
-            ) -> bool:
+            def gate_message_posted(self, event: MessagePosted, client: FakeClientContext) -> bool:
                 return event.tenant_id == client.tenant_id
 
         host = ModuleHost()
@@ -191,17 +186,14 @@ class TestDecoratorWiring:
 
             match = MessagePosted(tenant_id="t-1", body="hi")
             miss = MessagePosted(tenant_id="t-2", body="hi")
-            assert host.outbound_policies.apply(
-                match, FakeClientContext(tenant_id="t-1")
-            ) is True
-            assert host.outbound_policies.apply(
-                miss, FakeClientContext(tenant_id="t-1")
-            ) is False
+            assert host.outbound_policies.apply(match, FakeClientContext(tenant_id="t-1")) is True
+            assert host.outbound_policies.apply(miss, FakeClientContext(tenant_id="t-1")) is False
         finally:
             host.shutdown()
 
     def test_decorator_rejects_non_event_class(self):
         with pytest.raises(TypeError):
+
             @outbound_policy(str)  # type: ignore[arg-type]
             def bad_policy(self, event, client):
                 return True
@@ -274,9 +266,7 @@ class TestLazyRegistryConstruction:
         host.register(PublisherWithoutPolicy())
         try:
             assert host._outbound_policies is not None
-            assert (
-                host.outbound_policies.has_policy(MessagePosted) is False
-            )
+            assert host.outbound_policies.has_policy(MessagePosted) is False
         finally:
             host.shutdown()
 

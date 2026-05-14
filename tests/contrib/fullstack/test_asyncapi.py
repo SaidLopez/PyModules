@@ -187,9 +187,7 @@ class TestChannelsAndMessages:
         try:
             doc = emit_asyncapi(host)
             for name, message in doc["components"]["messages"].items():
-                assert message["payload"] == {
-                    "$ref": f"#/components/schemas/{name}"
-                }
+                assert message["payload"] == {"$ref": f"#/components/schemas/{name}"}
         finally:
             host.shutdown()
 
@@ -212,9 +210,7 @@ class TestSchemas:
         host = _build_host()
         try:
             doc = emit_asyncapi(host)
-            tags = doc["components"]["schemas"]["OrderPlaced"]["properties"][
-                "tags"
-            ]
+            tags = doc["components"]["schemas"]["OrderPlaced"]["properties"]["tags"]
             assert tags == {"type": "array", "items": {"type": "string"}}
         finally:
             host.shutdown()
@@ -223,9 +219,7 @@ class TestSchemas:
         host = _build_host()
         try:
             doc = emit_asyncapi(host)
-            metadata = doc["components"]["schemas"]["OrderPlaced"][
-                "properties"
-            ]["metadata"]
+            metadata = doc["components"]["schemas"]["OrderPlaced"]["properties"]["metadata"]
             assert metadata == {
                 "type": "object",
                 "additionalProperties": {"type": "string"},
@@ -244,9 +238,7 @@ class TestSchemas:
         host = _build_host()
         try:
             doc = emit_asyncapi(host)
-            address = doc["components"]["schemas"]["UserCreated"][
-                "properties"
-            ]["address"]
+            address = doc["components"]["schemas"]["UserCreated"]["properties"]["address"]
             # Inline object shape, not a $ref.
             assert address["type"] == "object"
             assert "$ref" not in address

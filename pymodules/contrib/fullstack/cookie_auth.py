@@ -48,6 +48,7 @@ before. The two paths coexist; the cookie shim is opt-in.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Cookie, HTTPException, Response, status
@@ -103,7 +104,7 @@ def make_cookie_auth_dependency(
     provider: AuthProvider,
     *,
     access_cookie_name: str = DEFAULT_ACCESS_COOKIE,
-):
+) -> Callable[..., Any]:
     """Factory returning a FastAPI dependency that authenticates via cookie.
 
     Args:

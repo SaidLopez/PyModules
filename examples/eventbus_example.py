@@ -16,7 +16,7 @@ Run with::
     python -m examples.eventbus_example
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from pymodules import (
     Command,
@@ -29,7 +29,6 @@ from pymodules import (
     module,
     subscribes,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared types

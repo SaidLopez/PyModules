@@ -373,7 +373,7 @@ class LifecycleMiddleware:
 
         try:
             result = await next_call(command)
-        except UnknownCommandError as e:
+        except UnknownCommandError:
             # Unmatched dispatch: not a handler error — call on_end with
             # was_handled=False, but skip on_error since no Module ran.
             if self.on_end is not None:

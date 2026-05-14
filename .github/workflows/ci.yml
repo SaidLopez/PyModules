@@ -97,7 +97,7 @@ jobs:
 
       - name: Run integration tests
         run: |
-          pytest tests -m integration -v
+          pytest tests/integration -v
 
   build:
     name: Build Package

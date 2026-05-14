@@ -104,14 +104,14 @@ import logging
 import threading
 import time
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from itertools import count
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
-from .exceptions import MissingOutboundPolicy, UnknownEventSubscription
+from .exceptions import FullstackError, MissingOutboundPolicy, UnknownEventSubscription
 
 if TYPE_CHECKING:
     from pymodules.host import ModuleHost
@@ -211,9 +211,7 @@ class _ShutdownCoordinator:
         with self._lock:
             return self._active_connections
 
-    def register_connection(
-        self, loop: asyncio.AbstractEventLoop, event: asyncio.Event
-    ) -> None:
+    def register_connection(self, loop: asyncio.AbstractEventLoop, event: asyncio.Event) -> None:
         """Track a new connection's loop+event and bump the active counter.
 
         Called from inside the streaming generator on the connection's
@@ -228,9 +226,7 @@ class _ShutdownCoordinator:
         if already_shutting:
             event.set()
 
-    def unregister_connection(
-        self, loop: asyncio.AbstractEventLoop, event: asyncio.Event
-    ) -> None:
+    def unregister_connection(self, loop: asyncio.AbstractEventLoop, event: asyncio.Event) -> None:
         """Drop a connection's tracking entry on disconnect."""
         with self._lock:
             self._active_connections = max(0, self._active_connections - 1)
@@ -322,12 +318,7 @@ def _format_sse_frame(event_cls_name: str, event_id: int, payload: dict[str, Any
     # ``\n`` line endings per the SSE spec. CRLF is also allowed by the
     # spec but plain LF is what httpx-sse / browser EventSource emit and
     # consume in practice.
-    return (
-        f"event: {event_cls_name}\n"
-        f"id: {event_id}\n"
-        f"data: {data}\n"
-        f"\n"
-    ).encode("utf-8")
+    return (f"event: {event_cls_name}\nid: {event_id}\ndata: {data}\n\n").encode()
 
 
 def build_sse_router(
@@ -452,7 +443,7 @@ def build_sse_router(
                 # the exception propagate because FastAPI has no built-in
                 # handler for ``FullstackError`` subclasses; the structured
                 # body is more useful to the JS layer than a stack trace.
-                exc = UnknownEventSubscription(name)
+                exc: FullstackError = UnknownEventSubscription(name)
                 sse_logger.info(
                     "Rejecting SSE subscription for unknown Event %r: %s",
                     name,
@@ -637,9 +628,7 @@ def build_sse_router(
                         )
                         continue
 
-                    frame = _format_sse_frame(
-                        type(event).__name__, next(id_counter), payload
-                    )
+                    frame = _format_sse_frame(type(event).__name__, next(id_counter), payload)
                     # Counter increments at the wire-write boundary, not
                     # at the policy check — denied events do not count.
                     metrics.events_pushed += 1
@@ -727,13 +716,9 @@ def register_with_host(
     matters because integration tests may build multiple routers on the
     same host across fixtures; we don't want to chain wrappers.
     """
-    coordinator: _ShutdownCoordinator | None = getattr(
-        router, "_sse_shutdown_coordinator", None
-    )
+    coordinator: _ShutdownCoordinator | None = getattr(router, "_sse_shutdown_coordinator", None)
     if coordinator is None:
-        raise TypeError(
-            "register_with_host requires a router returned by build_sse_router"
-        )
+        raise TypeError("register_with_host requires a router returned by build_sse_router")
 
     if getattr(host, _SSE_SHUTDOWN_HOOK_ATTR, False):
         return

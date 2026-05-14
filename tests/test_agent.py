@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 
@@ -819,9 +820,7 @@ class TestAgentSubscribesUnrelatedEventsIgnored:
         host.publish(_OtherEvent())
         # No subscribers for _OtherEvent → no spawn.
         assert spawned == []
-        assert not any(
-            r.template is Picky for r in host.agent_runs.values()
-        )
+        assert not any(r.template is Picky for r in host.agent_runs.values())
 
 
 class TestAgentRunNewKwargs:

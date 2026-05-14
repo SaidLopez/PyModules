@@ -64,7 +64,6 @@ from pymodules.contrib.fullstack import (
     outbound_policy,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic Events + Modules used across the test cases.
 # ---------------------------------------------------------------------------
@@ -101,9 +100,7 @@ class AlwaysTrueModule(Module):
     published_events = (MessagePosted,)
 
     @outbound_policy(MessagePosted)
-    def gate_message(
-        self, event: MessagePosted, client: ClientContext
-    ) -> bool:
+    def gate_message(self, event: MessagePosted, client: ClientContext) -> bool:
         return True
 
 
@@ -113,9 +110,7 @@ class TenantMatchModule(Module):
     published_events = (MessagePosted,)
 
     @outbound_policy(MessagePosted)
-    def gate_by_tenant(
-        self, event: MessagePosted, client: ClientContext
-    ) -> bool:
+    def gate_by_tenant(self, event: MessagePosted, client: ClientContext) -> bool:
         return event.tenant_id == client.tenant_id
 
 
@@ -125,15 +120,11 @@ class TwoEventsModule(Module):
     published_events = (MessagePosted, OrderPlaced)
 
     @outbound_policy(MessagePosted)
-    def gate_message(
-        self, event: MessagePosted, client: ClientContext
-    ) -> bool:
+    def gate_message(self, event: MessagePosted, client: ClientContext) -> bool:
         return True
 
     @outbound_policy(OrderPlaced)
-    def gate_order(
-        self, event: OrderPlaced, client: ClientContext
-    ) -> bool:
+    def gate_order(self, event: OrderPlaced, client: ClientContext) -> bool:
         return True
 
 
@@ -149,9 +140,7 @@ class RaisingPolicyModule(Module):
     published_events = (MessagePosted,)
 
     @outbound_policy(MessagePosted)
-    def explode_for_bomb_user(
-        self, event: MessagePosted, client: ClientContext
-    ) -> bool:
+    def explode_for_bomb_user(self, event: MessagePosted, client: ClientContext) -> bool:
         if client.user_id == "bomb-user":
             raise RuntimeError("policy boom")
         return True
@@ -188,9 +177,7 @@ def issue_token_sync(jwt_provider):
     """Sync helper for non-streaming tests."""
 
     def _issue(claims: dict[str, Any]) -> str:
-        return asyncio.get_event_loop().run_until_complete(
-            jwt_provider.create_token(claims)
-        )
+        return asyncio.get_event_loop().run_until_complete(jwt_provider.create_token(claims))
 
     return _issue
 
@@ -265,9 +252,7 @@ class _RunningServer:
         while time.monotonic() < deadline:
             if self.server.started:
                 try:
-                    with socket.create_connection(
-                        ("127.0.0.1", self.port), timeout=0.1
-                    ):
+                    with socket.create_connection(("127.0.0.1", self.port), timeout=0.1):
                         return
                 except OSError:
                     pass
@@ -301,9 +286,7 @@ def _parse_frame(block: str) -> dict[str, str]:
     return frame
 
 
-async def _read_one_frame(
-    response: httpx.Response, *, timeout: float = 3.0
-) -> dict[str, str]:
+async def _read_one_frame(response: httpx.Response, *, timeout: float = 3.0) -> dict[str, str]:
     """Read raw bytes until one non-comment SSE frame arrives."""
     buffer = ""
 
@@ -369,17 +352,13 @@ class TestAuth:
         try:
             app = _build_app(host, jwt_provider)
             client = TestClient(app)
-            response = client.get(
-                "/__pymodules__/events", params={"subscribe": "MessagePosted"}
-            )
+            response = client.get("/__pymodules__/events", params={"subscribe": "MessagePosted"})
             assert response.status_code == 401
             assert response.headers["www-authenticate"] == 'Cookie realm="pymodules"'
         finally:
             host.shutdown()
 
-    def test_expired_cookie_returns_401_with_challenge(
-        self, jwt_provider
-    ) -> None:
+    def test_expired_cookie_returns_401_with_challenge(self, jwt_provider) -> None:
         host = ModuleHost()
         host.register(AlwaysTrueModule())
         try:
@@ -422,9 +401,7 @@ class TestSubscriptionValidation:
         finally:
             host.shutdown()
 
-    def test_missing_outbound_policy_returns_400(
-        self, jwt_provider, issue_token_sync
-    ) -> None:
+    def test_missing_outbound_policy_returns_400(self, jwt_provider, issue_token_sync) -> None:
         host = ModuleHost()
         host.register(UnpoliciedModule())
         try:
@@ -470,9 +447,7 @@ class TestAlwaysTruePolicy:
                         cookies={"pymodules_access": token},
                     ) as response:
                         assert response.status_code == 200
-                        assert response.headers["content-type"].startswith(
-                            "text/event-stream"
-                        )
+                        assert response.headers["content-type"].startswith("text/event-stream")
 
                         # Wait until our subscription is wired before publishing.
                         for _ in range(100):
@@ -480,9 +455,7 @@ class TestAlwaysTruePolicy:
                                 break
                             await asyncio.sleep(0.02)
 
-                        _publish_after(
-                            host, MessagePosted(tenant_id="acme", body="hello")
-                        )
+                        _publish_after(host, MessagePosted(tenant_id="acme", body="hello"))
 
                         frame = await _read_one_frame(response)
                         assert frame["event"] == "MessagePosted"
@@ -502,9 +475,7 @@ class TestTenantMatchPolicy:
         host.register(TenantMatchModule())
         try:
             app = _build_app(host, jwt_provider)
-            token_acme = await issue_token_async(
-                {"sub": "u-acme", "tenant_id": "acme"}
-            )
+            token_acme = await issue_token_async({"sub": "u-acme", "tenant_id": "acme"})
 
             with _running_server(app) as server:
                 async with httpx.AsyncClient(base_url=server.base_url) as client:
@@ -519,12 +490,8 @@ class TestTenantMatchPolicy:
                                 break
                             await asyncio.sleep(0.02)
 
-                        _publish_after(
-                            host, MessagePosted(tenant_id="other", body="x"), 0.02
-                        )
-                        _publish_after(
-                            host, MessagePosted(tenant_id="acme", body="y"), 0.1
-                        )
+                        _publish_after(host, MessagePosted(tenant_id="other", body="x"), 0.02)
+                        _publish_after(host, MessagePosted(tenant_id="acme", body="y"), 0.1)
 
                         frame = await _read_one_frame(response, timeout=3.0)
                         payload = json.loads(frame["data"])
@@ -536,9 +503,7 @@ class TestTenantMatchPolicy:
         finally:
             host.shutdown()
 
-    async def test_cross_tenant_client_sees_nothing(
-        self, jwt_provider, issue_token_async
-    ) -> None:
+    async def test_cross_tenant_client_sees_nothing(self, jwt_provider, issue_token_async) -> None:
         """An ``other``-tenant client subscribes; we publish a tenant-``acme``
         Event. The policy drops it for this client; no frame arrives within
         the timeout window."""
@@ -546,9 +511,7 @@ class TestTenantMatchPolicy:
         host.register(TenantMatchModule())
         try:
             app = _build_app(host, jwt_provider)
-            token_other = await issue_token_async(
-                {"sub": "u-other", "tenant_id": "other"}
-            )
+            token_other = await issue_token_async({"sub": "u-other", "tenant_id": "other"})
 
             with _running_server(app) as server:
                 async with httpx.AsyncClient(base_url=server.base_url) as client:
@@ -563,9 +526,7 @@ class TestTenantMatchPolicy:
                                 break
                             await asyncio.sleep(0.02)
 
-                        _publish_after(
-                            host, MessagePosted(tenant_id="acme", body="x")
-                        )
+                        _publish_after(host, MessagePosted(tenant_id="acme", body="x"))
                         with pytest.raises(asyncio.TimeoutError):
                             await _read_one_frame(response, timeout=0.5)
         finally:
@@ -628,14 +589,8 @@ class TestMultipleSubscriptions:
 
                         assert "MessagePosted" in seen
                         assert "OrderPlaced" in seen
-                        assert (
-                            json.loads(seen["MessagePosted"]["data"])["body"]
-                            == "m"
-                        )
-                        assert (
-                            json.loads(seen["OrderPlaced"]["data"])["order_id"]
-                            == "o-1"
-                        )
+                        assert json.loads(seen["MessagePosted"]["data"])["body"] == "m"
+                        assert json.loads(seen["OrderPlaced"]["data"])["order_id"] == "o-1"
         finally:
             host.shutdown()
 
@@ -662,27 +617,28 @@ class TestPerConnectionErrorIsolation:
         host.register(RaisingPolicyModule())
         try:
             app = _build_app(host, jwt_provider)
-            good_token = await issue_token_async(
-                {"sub": "good-user", "tenant_id": "acme"}
-            )
-            bomb_token = await issue_token_async(
-                {"sub": "bomb-user", "tenant_id": "acme"}
-            )
+            good_token = await issue_token_async({"sub": "good-user", "tenant_id": "acme"})
+            bomb_token = await issue_token_async({"sub": "bomb-user", "tenant_id": "acme"})
 
             with _running_server(app) as server:
-                async with httpx.AsyncClient(base_url=server.base_url) as good_client, \
-                        httpx.AsyncClient(base_url=server.base_url) as bomb_client:
-                    async with good_client.stream(
-                        "GET",
-                        "/__pymodules__/events",
-                        params={"subscribe": "MessagePosted"},
-                        cookies={"pymodules_access": good_token},
-                    ) as good_resp, bomb_client.stream(
-                        "GET",
-                        "/__pymodules__/events",
-                        params={"subscribe": "MessagePosted"},
-                        cookies={"pymodules_access": bomb_token},
-                    ) as bomb_resp:
+                async with (
+                    httpx.AsyncClient(base_url=server.base_url) as good_client,
+                    httpx.AsyncClient(base_url=server.base_url) as bomb_client,
+                ):
+                    async with (
+                        good_client.stream(
+                            "GET",
+                            "/__pymodules__/events",
+                            params={"subscribe": "MessagePosted"},
+                            cookies={"pymodules_access": good_token},
+                        ) as good_resp,
+                        bomb_client.stream(
+                            "GET",
+                            "/__pymodules__/events",
+                            params={"subscribe": "MessagePosted"},
+                            cookies={"pymodules_access": bomb_token},
+                        ) as bomb_resp,
+                    ):
                         assert good_resp.status_code == 200
                         assert bomb_resp.status_code == 200
 
@@ -747,21 +703,13 @@ class TestDisconnectCleanup:
                         assert response.status_code == 200
                         for _ in range(200):
                             if (
-                                host.event_bus.subscriber_count(MessagePosted)
-                                == baseline_msg + 1
-                                and host.event_bus.subscriber_count(OrderPlaced)
-                                == baseline_ord + 1
+                                host.event_bus.subscriber_count(MessagePosted) == baseline_msg + 1
+                                and host.event_bus.subscriber_count(OrderPlaced) == baseline_ord + 1
                             ):
                                 break
                             await asyncio.sleep(0.02)
-                        assert (
-                            host.event_bus.subscriber_count(MessagePosted)
-                            == baseline_msg + 1
-                        )
-                        assert (
-                            host.event_bus.subscriber_count(OrderPlaced)
-                            == baseline_ord + 1
-                        )
+                        assert host.event_bus.subscriber_count(MessagePosted) == baseline_msg + 1
+                        assert host.event_bus.subscriber_count(OrderPlaced) == baseline_ord + 1
 
                     # ``client.stream``'s ``async with`` exit closes the
                     # response and signals the server to cancel the
@@ -769,21 +717,13 @@ class TestDisconnectCleanup:
                     # loop. Poll until cleanup completes.
                     for _ in range(200):
                         if (
-                            host.event_bus.subscriber_count(MessagePosted)
-                            == baseline_msg
-                            and host.event_bus.subscriber_count(OrderPlaced)
-                            == baseline_ord
+                            host.event_bus.subscriber_count(MessagePosted) == baseline_msg
+                            and host.event_bus.subscriber_count(OrderPlaced) == baseline_ord
                         ):
                             break
                         await asyncio.sleep(0.02)
 
-                    assert (
-                        host.event_bus.subscriber_count(MessagePosted)
-                        == baseline_msg
-                    )
-                    assert (
-                        host.event_bus.subscriber_count(OrderPlaced)
-                        == baseline_ord
-                    )
+                    assert host.event_bus.subscriber_count(MessagePosted) == baseline_msg
+                    assert host.event_bus.subscriber_count(OrderPlaced) == baseline_ord
         finally:
             host.shutdown()

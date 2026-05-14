@@ -66,8 +66,7 @@ def test_agent_spawner_spawn_signature_is_template_and_kwargs() -> None:
         f"AgentSpawner.spawn signature drifted: {sig}"
     )
     assert params[2].kind is inspect.Parameter.VAR_KEYWORD, (
-        "AgentSpawner.spawn third parameter must be **kwargs, got "
-        f"{params[2].kind}"
+        f"AgentSpawner.spawn third parameter must be **kwargs, got {params[2].kind}"
     )
 
 

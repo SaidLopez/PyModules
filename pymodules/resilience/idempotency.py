@@ -148,9 +148,7 @@ class IdempotencyMiddleware:
             hit, cached = await self.store.get(key)
             if hit:
                 self.hits += 1
-                resilience_logger.debug(
-                    "Idempotency hit for command %s id=%s", command.name, key
-                )
+                resilience_logger.debug("Idempotency hit for command %s id=%s", command.name, key)
                 return cached
 
             self.misses += 1

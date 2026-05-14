@@ -409,9 +409,7 @@ class ModuleHost:
         not the bound method directly.
         """
         triples: list[tuple[type[Event], str, Callable[[Event], Any] | None]] = []
-        for name, member in inspect.getmembers(
-            type(template), predicate=inspect.isfunction
-        ):
+        for name, member in inspect.getmembers(type(template), predicate=inspect.isfunction):
             claims = getattr(member, SUBSCRIBES_ATTR, None)
             if not claims:
                 continue
@@ -420,9 +418,7 @@ class ModuleHost:
                 triples.append((event_class, name, route_by))
         return triples
 
-    def _collect_scheduled(
-        self, template: Agent
-    ) -> list[tuple[str, Any]]:
+    def _collect_scheduled(self, template: Agent) -> list[tuple[str, Any]]:
         """Scan an Agent template's class for ``@scheduled``-decorated methods.
 
         Mirrors :meth:`_collect_handlers` / :meth:`_collect_subscribers`
@@ -432,9 +428,7 @@ class ModuleHost:
         instance per spawn.
         """
         pairs: list[tuple[str, Any]] = []
-        for name, member in inspect.getmembers(
-            type(template), predicate=inspect.isfunction
-        ):
+        for name, member in inspect.getmembers(type(template), predicate=inspect.isfunction):
             schedule = getattr(member, SCHEDULED_ATTR, None)
             if schedule is None:
                 continue
@@ -467,9 +461,7 @@ class ModuleHost:
     @overload
     def register(self, module: Agent, override: bool = False) -> "ModuleHost": ...
 
-    def register(
-        self, module: Module | Agent, override: bool = False
-    ) -> "ModuleHost":
+    def register(self, module: Module | Agent, override: bool = False) -> "ModuleHost":
         """Register a :class:`Module` *or* :class:`Agent` instance.
 
         For a :class:`Module` (the original path, unchanged): scans the
@@ -522,9 +514,8 @@ class ModuleHost:
             # this Module declares either ``published_events`` or any
             # ``@outbound_policy``-decorated method — silent Modules
             # leave the registry uninstantiated.
-            if new_outbound_policies or getattr(
-                type(module), "published_events", ()
-            ):
+            published = getattr(type(module), "published_events", ())
+            if new_outbound_policies or published:
                 registry = self.outbound_policies
                 for event_class, bound_policy in new_outbound_policies:
                     # ``override=False`` — double-registration of an
@@ -675,9 +666,7 @@ class ModuleHost:
                 # the integration seam that lets the scheduler honour
                 # :meth:`shutdown` without :meth:`shutdown` having to
                 # touch the scheduler directly.
-                self._scheduler.set_run_alive_predicate(
-                    lambda run_id: run_id in self._agent_runs
-                )
+                self._scheduler.set_run_alive_predicate(lambda run_id: run_id in self._agent_runs)
 
         # Wire ``@subscribes``-decorated methods on the Agent template
         # (issue #14 / ADR-0008). For each ``(EventCls, method_name,
@@ -693,14 +682,11 @@ class ModuleHost:
         agent_subscribers = self._collect_agent_subscribers(agent)
         template_class = type(agent)
         for event_class, method_name, route_by in agent_subscribers:
-            wrapper = self._make_agent_subscriber_wrapper(
-                template_class, method_name, route_by
-            )
+            wrapper = self._make_agent_subscriber_wrapper(template_class, method_name, route_by)
             self._event_bus.subscribe(event_class, wrapper)
 
         host_logger.info(
-            "Registered Agent template: %s (scheduled_methods=%d, "
-            "event_subscribers=%d)",
+            "Registered Agent template: %s (scheduled_methods=%d, event_subscribers=%d)",
             type(agent).__name__,
             len(scheduled_decls),
             len(agent_subscribers),
@@ -806,8 +792,7 @@ class ModuleHost:
                         loop.create_task(result)
             except Exception:  # noqa: BLE001 — ADR-0007 isolation
                 host_logger.exception(
-                    "Error in Agent @subscribes wrapper for template=%s "
-                    "method=%s on %s",
+                    "Error in Agent @subscribes wrapper for template=%s method=%s on %s",
                     template.__name__,
                     method_name,
                     type(event).__name__,
@@ -887,9 +872,7 @@ class ModuleHost:
         # they also set their own); the comparison must be ``>=`` because
         # the new run has not been added to ``_agent_runs`` yet.
         if template.max_concurrent is not None:
-            live = sum(
-                1 for r in self._agent_runs.values() if r.template is template
-            )
+            live = sum(1 for r in self._agent_runs.values() if r.template is template)
             if live >= template.max_concurrent:
                 raise AgentSpawnRejected(
                     f"max_concurrent={template.max_concurrent} reached for "
@@ -902,9 +885,7 @@ class ModuleHost:
         # framework-owned reserved names that flow into :class:`AgentRun`,
         # NOT into ``template(**kwargs)``. We pop them off here so they
         # do not collide with user-defined Agent ``__init__`` signatures.
-        triggered_by_event: Event | None = kwargs.pop(
-            "triggered_by_event", None
-        )
+        triggered_by_event: Event | None = kwargs.pop("triggered_by_event", None)
         routing_key: Any = kwargs.pop("routing_key", None)
 
         # Build a *fresh* instance per spawn. The registered template
@@ -1079,8 +1060,7 @@ class ModuleHost:
         # have *already* happened in this chain. If ``prior_attempts``
         # is N, ``should_retry`` decides whether to allow attempt N+1.
         if not (
-            isinstance(unhandled, Exception)
-            and policy.should_retry(unhandled, prior_attempts)
+            isinstance(unhandled, Exception) and policy.should_retry(unhandled, prior_attempts)
         ):
             # Exhausted or non-retryable exception type. The AgentFailed
             # already published above is the terminal one — nothing more
@@ -1120,9 +1100,7 @@ class ModuleHost:
         # of restarts. ``+1`` because this restart is now in flight.
         new_run._restart_attempt = prior_attempts + 1  # type: ignore[attr-defined]
 
-    def _publish_agent_failed(
-        self, run: AgentRun, error: BaseException
-    ) -> None:
+    def _publish_agent_failed(self, run: AgentRun, error: BaseException) -> None:
         """Publish an :class:`AgentFailed` Event for ``run`` carrying ``error``.
 
         Pulled out of ``_run_agent`` so :meth:`shutdown` can call it
@@ -1137,9 +1115,7 @@ class ModuleHost:
         try:
             self.publish(event)
         except Exception:  # noqa: BLE001 — bookkeeping must not leak
-            host_logger.exception(
-                "Failed to publish AgentFailed for AgentRun %s", run.id
-            )
+            host_logger.exception("Failed to publish AgentFailed for AgentRun %s", run.id)
 
     # ------------------------------------------------------------------
     # Dispatch
@@ -1312,9 +1288,7 @@ class ModuleHost:
             try:
                 scheduler.stop()
             except Exception:  # noqa: BLE001 — bookkeeping must not leak
-                host_logger.exception(
-                    "Error stopping scheduler during host shutdown"
-                )
+                host_logger.exception("Error stopping scheduler during host shutdown")
 
         # Snapshot the in-flight runs *before* requesting stop — the
         # dict mutates during teardown via ``_run_agent``'s finally-block.
@@ -1403,9 +1377,7 @@ class ModuleHost:
             "a sync context, or await each run.stop() yourself first."
         )
 
-    async def _shutdown_drive(
-        self, in_flight: list[AgentRun], grace: float
-    ) -> None:
+    async def _shutdown_drive(self, in_flight: list[AgentRun], grace: float) -> None:
         """Async driver for the cooperative-stop wait + hard-cancel pass.
 
         Run via ``asyncio.run`` from :meth:`_await_agent_shutdown`.
@@ -1428,15 +1400,11 @@ class ModuleHost:
             event = getattr(run, "_completed", None)
             if event is None:
                 continue
-            deadline_tasks.append(
-                asyncio.create_task(self._wait_for_run_completion(run, grace))
-            )
+            deadline_tasks.append(asyncio.create_task(self._wait_for_run_completion(run, grace)))
         if deadline_tasks:
             await asyncio.gather(*deadline_tasks, return_exceptions=True)
 
-    async def _wait_for_run_completion(
-        self, run: AgentRun, grace: float
-    ) -> None:
+    async def _wait_for_run_completion(self, run: AgentRun, grace: float) -> None:
         """Wait up to ``grace`` seconds for ``run`` to terminate; hard-cancel if not.
 
         Polls ``run._completed`` (an :class:`asyncio.Event` on the run's
@@ -1446,7 +1414,7 @@ class ModuleHost:
         """
         loop = asyncio.get_running_loop()
         deadline = loop.time() + grace
-        completed: asyncio.Event = run._completed
+        completed: asyncio.Event = run._completed  # type: ignore[attr-defined]
         # Tight-ish poll loop: 10ms tick is fast enough for tests, cheap
         # enough for production teardown. Using a fixed tick (rather
         # than an exponential one) keeps the worst-case wakeup latency
@@ -1461,8 +1429,7 @@ class ModuleHost:
         # Grace expired and the run is still alive. Hard-cancel.
         task = self._agent_tasks.get(run.id)
         host_logger.warning(
-            "AgentRun %s (template=%s) did not honour stop within %.2fs; "
-            "hard-cancelling",
+            "AgentRun %s (template=%s) did not honour stop within %.2fs; hard-cancelling",
             run.id,
             run.template.__name__,
             grace,
@@ -1474,9 +1441,7 @@ class ModuleHost:
         # body raised before the cancel landed — we hold the canonical
         # "stuck" record here because only ``shutdown()`` knows that
         # the hard-cancel was driven by grace expiry.
-        stuck = AgentRunStuck(
-            f"AgentRun {run.id} did not honour stop within {grace:.2f}s"
-        )
+        stuck = AgentRunStuck(f"AgentRun {run.id} did not honour stop within {grace:.2f}s")
         self._publish_agent_failed(run, stuck)
 
 
