@@ -58,12 +58,10 @@ import asyncio
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from .logging import get_logger
-
-UTC = timezone.utc
 
 if TYPE_CHECKING:
     pass

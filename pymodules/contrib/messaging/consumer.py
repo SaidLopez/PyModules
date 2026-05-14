@@ -210,7 +210,7 @@ class EventConsumer:
                     self._consumer_task,
                     timeout=self.config.shutdown_timeout,
                 )
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
 
         # Wait for pending handlers

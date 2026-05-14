@@ -304,7 +304,7 @@ class DNSServiceRegistry(ServiceRegistry):
 
             logger.debug("Resolved %d instances for %s", len(instances), service_name)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("DNS resolution timeout for %s", dns_name)
         except socket.gaierror as e:
             # No records found

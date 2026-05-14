@@ -22,7 +22,7 @@ from __future__ import annotations
 # ``typing.assert_type`` is Python 3.11+; ``typing_extensions`` ships
 # the same symbol on older runtimes. The project's mypy config targets
 # Python 3.10, so we import from ``typing_extensions`` to stay portable.
-from typing_extensions import assert_type
+from typing import assert_type
 
 from pymodules import Agent, AgentRun, AgentSpawner
 
