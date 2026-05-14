@@ -5,13 +5,13 @@ Provides APIError exception hierarchy and FastAPI error handlers.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
 
 
-class ErrorCode(str, Enum):
+class ErrorCode(StrEnum):
     """Standard error codes for the API."""
 
     # Authentication errors (401)

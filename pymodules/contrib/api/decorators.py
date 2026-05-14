@@ -8,13 +8,13 @@ explicit by design (see CONTEXT.md, non-goal #1).
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
 # Rescued from the deleted ``conventions.py``: the enum is still useful as a
 # typed sugar for the ``method=`` argument of ``@api_endpoint``.
-class HTTPMethod(str, Enum):
+class HTTPMethod(StrEnum):
     """HTTP methods for REST endpoints."""
 
     GET = "GET"
