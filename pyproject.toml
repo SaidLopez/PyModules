@@ -177,6 +177,7 @@ module = [
     "pymodules.contrib.db.mixins",
     "pymodules.contrib.db",
     "pymodules.contrib.messaging.persistent_dlq",
+    "pymodules.contrib.messaging.redis_broker",
 ]
 ignore_errors = true
 
